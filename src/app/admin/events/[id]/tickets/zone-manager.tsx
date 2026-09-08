@@ -12,9 +12,11 @@ import {
   Textarea,
   cn,
 } from "@/components/ui";
+import { SeatLegend, SeatMap, ShapePreview, type MapSeat } from "@/components/seat-map";
+import { SHAPES, ringSizes, type RingConfig, type ZoneShape } from "@/lib/seat-layout";
 import { formatMinor } from "@/lib/money";
 
-type ZoneRow = {
+type ZoneRow = RingConfig & {
   id: string;
   name: string;
   description: string | null;
@@ -33,14 +35,7 @@ type ZoneRow = {
   sold: number;
 };
 
-type SeatRow = {
-  id: string;
-  zoneId: string;
-  label: string;
-  rowLabel: string;
-  seatNumber: number;
-  status: string;
-};
+type SeatRow = MapSeat & { zoneId: string };
 
 const swatches = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"];
 
@@ -65,7 +60,7 @@ export function ZoneManager({
           </h2>
           <p className="mt-0.5 text-sm text-ink-400">
             {seated
-              ? "Lay out each block as a grid of rows and seats. Buyers pick their exact seat."
+              ? "Each block has its own shape — straight rows, concentric rings, or a curved arc."
               : "Open ground — each category is a price and a capacity. No seat numbers."}
           </p>
         </div>
@@ -90,15 +85,16 @@ export function ZoneManager({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex min-w-0 gap-3">
                 <span
-                  className="mt-1 size-3 shrink-0 rounded-[4px]"
+                  className="mt-1 size-3 shrink-0 rounded-full"
                   style={{ background: z.color }}
                 />
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 font-medium">
                     {z.name}
                     {!z.active ? <Badge tone="amber">paused</Badge> : null}
-                    {z.admitsCount > 1 ? (
-                      <Badge tone="brand">admits {z.admitsCount}</Badge>
+                    {z.admitsCount > 1 ? <Badge tone="brand">admits {z.admitsCount}</Badge> : null}
+                    {seated ? (
+                      <Badge>{SHAPES.find((s) => s.value === z.shape)?.title ?? z.shape}</Badge>
                     ) : null}
                   </p>
                   {z.description ? (
@@ -127,10 +123,7 @@ export function ZoneManager({
             </div>
 
             {seated ? (
-              <SeatGrid
-                zone={z}
-                seats={seats.filter((s) => s.zoneId === z.id)}
-              />
+              <ZoneSeatMap zone={z} seats={seats.filter((s) => s.zoneId === z.id)} />
             ) : (
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-800">
                 <div
@@ -144,6 +137,35 @@ export function ZoneManager({
             )}
           </Card>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function ZoneSeatMap({ zone, seats }: { zone: ZoneRow; seats: SeatRow[] }) {
+  const [pending, start] = useTransition();
+
+  return (
+    <div className="mt-4">
+      <p className="mb-2 text-xs text-ink-400">
+        Click a seat to block or unblock it — broken chair, camera position, house seats.
+      </p>
+      <div
+        className={cn(
+          "rounded-xl border border-ink-800 bg-ink-950/60 p-3 transition",
+          pending && "opacity-60",
+        )}
+      >
+        <SeatMap
+          zone={zone}
+          seats={seats}
+          mode="edit"
+          theme="dark"
+          onToggle={(seatId) => start(() => void toggleSeatBlock(seatId))}
+        />
+      </div>
+      <div className="mt-2">
+        <SeatLegend color={zone.color} theme="dark" />
       </div>
     </div>
   );
@@ -179,19 +201,76 @@ function ZoneForm({
 }) {
   const [state, action, pending] = useActionState(saveZone, undefined);
   const [color, setColor] = useState(zone?.color ?? swatches[nextSort % swatches.length]);
+  const [shape, setShape] = useState<ZoneShape>((zone?.shape as ZoneShape) ?? "grid");
 
-  if (state && "ok" in state && state.ok) {
-    // The action revalidated the list; close on the next tick.
-    queueMicrotask(onDone);
-  }
+  // Live geometry so the organiser sees the layout while typing numbers.
+  const [rows, setRows] = useState(zone?.rows || 6);
+  const [cols, setCols] = useState(zone?.cols || 14);
+  const [ringCount, setRingCount] = useState(zone?.ringCount || 5);
+  const [ringStartSeats, setRingStartSeats] = useState(zone?.ringStartSeats || 12);
+  const [ringSeatStep, setRingSeatStep] = useState(zone?.ringSeatStep ?? 6);
+  const [arcSpanDeg, setArcSpanDeg] = useState(zone?.arcSpanDeg ?? 360);
+  const [arcStartDeg, setArcStartDeg] = useState(zone?.arcStartDeg ?? 0);
+  const [innerHolePct, setInnerHolePct] = useState(zone?.innerHolePct ?? 35);
+
+  if (state && "ok" in state && state.ok) queueMicrotask(onDone);
+
+  const cfg: RingConfig = {
+    shape,
+    ringCount,
+    ringStartSeats,
+    ringSeatStep,
+    arcSpanDeg: shape === "rings" ? 360 : arcSpanDeg,
+    arcStartDeg,
+    innerHolePct,
+  };
+  const sizes = ringSizes(cfg);
+  const seatTotal = shape === "grid" ? rows * cols : sizes.reduce((n, s) => n + s, 0);
+
+  // A preview needs seat rows; build them from the live config, not the database.
+  const previewSeats: MapSeat[] =
+    shape === "grid"
+      ? Array.from({ length: Math.min(rows * cols, 1200) }, (_, i) => {
+          const r = Math.floor(i / cols);
+          const c = i % cols;
+          return {
+            id: `p${i}`,
+            label: `${String.fromCharCode(65 + r)}${c + 1}`,
+            rowLabel: String.fromCharCode(65 + r),
+            seatNumber: c + 1,
+            ringIndex: 0,
+            posInRing: 0,
+            ringSize: 0,
+            x: c + 1,
+            y: r,
+            state: "available" as const,
+          };
+        })
+      : sizes.flatMap((size, ringIndex) =>
+          Array.from({ length: size }, (_, pos) => ({
+            id: `p${ringIndex}-${pos}`,
+            label: `R${ringIndex + 1}-${pos + 1}`,
+            rowLabel: `R${ringIndex + 1}`,
+            seatNumber: pos + 1,
+            ringIndex,
+            posInRing: pos,
+            ringSize: size,
+            x: pos,
+            y: ringIndex,
+            state: "available" as const,
+          })),
+        );
 
   return (
     <Card className="border-brand-600/40 bg-brand-600/[0.04] p-5">
-      <SectionTitle title={zone ? `Edit ${zone.name}` : seated ? "New seating block" : "New ticket category"} />
-      <form action={action} className="space-y-4">
+      <SectionTitle
+        title={zone ? `Edit ${zone.name}` : seated ? "New seating block" : "New ticket category"}
+      />
+      <form action={action} className="space-y-5">
         <input type="hidden" name="eventId" value={event.id} />
         <input type="hidden" name="zoneId" value={zone?.id ?? ""} />
         <input type="hidden" name="color" value={color} />
+        <input type="hidden" name="shape" value={shape} />
         <input type="hidden" name="sortOrder" value={zone?.sortOrder ?? nextSort} />
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -215,7 +294,7 @@ function ZoneForm({
           </Field>
         </div>
 
-        <Field label="Description" hint="Shown to buyers under the category name.">
+        <Field label="Description" hint="Shown to buyers under the name.">
           <Textarea
             name="description"
             defaultValue={zone?.description ?? ""}
@@ -225,16 +304,194 @@ function ZoneForm({
         </Field>
 
         {seated ? (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Rows">
-              <Input name="rows" type="number" min={0} max={40} defaultValue={zone?.rows ?? 5} />
-            </Field>
-            <Field label="Seats per row">
-              <Input name="cols" type="number" min={0} max={60} defaultValue={zone?.cols ?? 12} />
-            </Field>
-            <Field label="First row letter">
-              <Input name="rowStart" maxLength={1} defaultValue="A" />
-            </Field>
+          <div className="space-y-4">
+            <div>
+              <span className="mb-2 block text-xs font-medium uppercase tracking-wide text-ink-400">
+                Layout shape
+              </span>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {SHAPES.map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => setShape(s.value)}
+                    className={cn(
+                      "flex gap-3 rounded-xl border p-3 text-left transition",
+                      shape === s.value
+                        ? "border-brand-500 bg-brand-600/10"
+                        : "border-ink-700 bg-ink-900/60 hover:border-ink-600",
+                    )}
+                  >
+                    <span className="shrink-0 rounded-lg bg-ink-950/70 p-1">
+                      <ShapePreview
+                        shape={s.value}
+                        color={color}
+                        size={52}
+                        config={{
+                          shape: s.value,
+                          rows: 6,
+                          cols: 10,
+                          ringCount: 4,
+                          ringStartSeats: 10,
+                          ringSeatStep: 6,
+                          arcSpanDeg: s.value === "arc" ? 200 : 360,
+                          arcStartDeg: s.value === "arc" ? 250 : 0,
+                          innerHolePct: 35,
+                          color,
+                        }}
+                      />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">{s.title}</span>
+                      <span className="mt-0.5 block text-xs text-ink-400">{s.bestFor}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-ink-400">
+                {SHAPES.find((s) => s.value === shape)?.body}
+              </p>
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+              <div className="space-y-4">
+                {shape === "grid" ? (
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <Field label="Rows">
+                      <Input
+                        name="rows"
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={rows}
+                        onChange={(e) => setRows(Number(e.target.value) || 0)}
+                      />
+                    </Field>
+                    <Field label="Seats per row">
+                      <Input
+                        name="cols"
+                        type="number"
+                        min={1}
+                        max={80}
+                        value={cols}
+                        onChange={(e) => setCols(Number(e.target.value) || 0)}
+                      />
+                    </Field>
+                    <Field label="First row letter">
+                      <Input name="rowStart" maxLength={1} defaultValue="A" />
+                    </Field>
+                  </div>
+                ) : (
+                  <>
+                    <input type="hidden" name="rows" value={0} />
+                    <input type="hidden" name="cols" value={0} />
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <Field label="Layers" hint="Rings from the centre out.">
+                        <Input
+                          name="ringCount"
+                          type="number"
+                          min={1}
+                          max={40}
+                          value={ringCount}
+                          onChange={(e) => setRingCount(Number(e.target.value) || 0)}
+                        />
+                      </Field>
+                      <Field label="Seats in layer 1">
+                        <Input
+                          name="ringStartSeats"
+                          type="number"
+                          min={1}
+                          max={200}
+                          value={ringStartSeats}
+                          onChange={(e) => setRingStartSeats(Number(e.target.value) || 0)}
+                        />
+                      </Field>
+                      <Field label="Added per layer" hint="Outer layers hold more.">
+                        <Input
+                          name="ringSeatStep"
+                          type="number"
+                          min={0}
+                          max={60}
+                          value={ringSeatStep}
+                          onChange={(e) => setRingSeatStep(Number(e.target.value) || 0)}
+                        />
+                      </Field>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <Field label={`Empty centre — ${innerHolePct}%`}>
+                        <input
+                          name="innerHolePct"
+                          type="range"
+                          min={0}
+                          max={80}
+                          value={innerHolePct}
+                          onChange={(e) => setInnerHolePct(Number(e.target.value))}
+                          className="w-full accent-[--color-brand-600]"
+                        />
+                      </Field>
+                      {shape === "arc" ? (
+                        <>
+                          <Field label={`Sweep — ${arcSpanDeg}°`}>
+                            <input
+                              name="arcSpanDeg"
+                              type="range"
+                              min={30}
+                              max={350}
+                              value={arcSpanDeg}
+                              onChange={(e) => setArcSpanDeg(Number(e.target.value))}
+                              className="w-full accent-[--color-brand-600]"
+                            />
+                          </Field>
+                          <Field label={`Facing — ${arcStartDeg}°`}>
+                            <input
+                              name="arcStartDeg"
+                              type="range"
+                              min={0}
+                              max={359}
+                              value={arcStartDeg}
+                              onChange={(e) => setArcStartDeg(Number(e.target.value))}
+                              className="w-full accent-[--color-brand-600]"
+                            />
+                          </Field>
+                        </>
+                      ) : (
+                        <>
+                          <input type="hidden" name="arcSpanDeg" value={360} />
+                          <input type="hidden" name="arcStartDeg" value={0} />
+                        </>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-ink-400">
+                      Layers hold {sizes.slice(0, 8).join(", ")}
+                      {sizes.length > 8 ? "…" : ""} seats.
+                    </p>
+                  </>
+                )}
+
+                <p className="text-sm">
+                  <span className="font-medium">{seatTotal.toLocaleString("en-IN")}</span>{" "}
+                  <span className="text-ink-400">seats in this block</span>
+                  {zone && zone.sold > 0 ? (
+                    <span className="ml-2 text-amber-400">
+                      · {zone.sold} already sold and will be kept
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-ink-800 bg-ink-950/60 p-3">
+                <p className="mb-1 text-xs uppercase tracking-wide text-ink-400">Live preview</p>
+                <SeatMap
+                  zone={{ ...cfg, rows, cols, color }}
+                  seats={previewSeats}
+                  mode="edit"
+                  theme="dark"
+                  maxHeight={280}
+                />
+              </div>
+            </div>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-3">
@@ -279,7 +536,7 @@ function ZoneForm({
                 aria-label={`Colour ${s}`}
                 onClick={() => setColor(s)}
                 className={cn(
-                  "size-7 rounded-lg border-2 transition",
+                  "size-7 rounded-full border-2 transition",
                   color === s ? "border-ink-50" : "border-transparent",
                 )}
                 style={{ background: s }}
@@ -312,76 +569,5 @@ function ZoneForm({
         </div>
       </form>
     </Card>
-  );
-}
-
-function SeatGrid({ zone, seats }: { zone: ZoneRow; seats: SeatRow[] }) {
-  const [pending, start] = useTransition();
-  const rows = new Map<string, SeatRow[]>();
-  for (const s of seats) {
-    if (!rows.has(s.rowLabel)) rows.set(s.rowLabel, []);
-    rows.get(s.rowLabel)!.push(s);
-  }
-
-  if (!seats.length)
-    return <p className="mt-3 text-sm text-ink-400">No seats yet — set rows and seats per row.</p>;
-
-  return (
-    <div className="mt-4">
-      <p className="mb-2 text-xs text-ink-400">
-        Click a seat to block or unblock it (broken chair, camera position, house seats).
-      </p>
-      <div className="overflow-x-auto rounded-lg border border-ink-800 bg-ink-950/50 p-3">
-        <div className="inline-flex min-w-full flex-col gap-1">
-          {[...rows.entries()]
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([rowLabel, rowSeats]) => (
-              <div key={rowLabel} className="flex items-center gap-1">
-                <span className="w-5 shrink-0 text-center text-[10px] text-ink-500">
-                  {rowLabel}
-                </span>
-                {rowSeats
-                  .sort((a, b) => a.seatNumber - b.seatNumber)
-                  .map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      disabled={s.status === "sold" || pending}
-                      title={`${s.label} — ${s.status}`}
-                      onClick={() => start(() => void toggleSeatBlock(s.id))}
-                      className={cn(
-                        "size-5 rounded-[3px] text-[8px] transition",
-                        s.status === "sold" && "cursor-not-allowed opacity-100",
-                        s.status === "blocked" && "bg-ink-700 text-ink-500",
-                        s.status === "available" && "hover:opacity-80",
-                      )}
-                      style={
-                        s.status === "sold"
-                          ? { background: "#d03b3b" }
-                          : s.status === "available"
-                            ? { background: zone.color }
-                            : undefined
-                      }
-                    />
-                  ))}
-              </div>
-            ))}
-        </div>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-4 text-xs text-ink-400">
-        <Legend color={zone.color} label="Available" />
-        <Legend color="#d03b3b" label="Sold" />
-        <Legend color="#2c2839" label="Blocked" />
-      </div>
-    </div>
-  );
-}
-
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span className="size-2.5 rounded-[3px]" style={{ background: color }} />
-      {label}
-    </span>
   );
 }

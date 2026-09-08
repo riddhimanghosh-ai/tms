@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { events, organizers, seats, zones } from "@/db/schema";
+import { events, organizers, orders, seats, zones } from "@/db/schema";
 import { unavailableSeatIds, zoneAvailability } from "./inventory";
 import type { PublicSeat, PublicZone } from "@/components/booking/booking-widget";
 
@@ -36,6 +36,15 @@ export async function loadPublicEvent(orgSlug: string, eventSlug: string) {
       minPerOrder: z.minPerOrder,
       maxPerOrder: z.maxPerOrder,
       color: z.color,
+      shape: (z.shape as PublicZone["shape"]) ?? "grid",
+      rows: z.rows,
+      cols: z.cols,
+      ringCount: z.ringCount,
+      ringStartSeats: z.ringStartSeats,
+      ringSeatStep: z.ringSeatStep,
+      arcSpanDeg: z.arcSpanDeg,
+      arcStartDeg: z.arcStartDeg,
+      innerHolePct: z.innerHolePct,
       available: a?.available ?? 0,
       soldOut: (a?.available ?? 0) <= 0,
     };
@@ -55,11 +64,32 @@ export async function loadPublicEvent(orgSlug: string, eventSlug: string) {
       label: s.label,
       rowLabel: s.rowLabel,
       seatNumber: s.seatNumber,
+      ringIndex: s.ringIndex,
+      posInRing: s.posInRing,
+      ringSize: s.ringSize,
+      x: s.x,
+      y: s.y,
       taken: taken.has(s.id) || s.status === "blocked",
     }));
   }
 
   const totalAvailable = publicZones.reduce((n, z) => n + z.available, 0);
 
-  return { event, organizer, zones: publicZones, seats: publicSeats, totalAvailable };
+  // Social proof on the landing page comes from real paid orders, not a guess.
+  const sold = await db
+    .select({ n: sql<number>`coalesce(sum(${orders.ticketCount}), 0)` })
+    .from(orders)
+    .where(and(eq(orders.eventId, event.id), eq(orders.status, "paid")))
+    .get();
+
+  return {
+    event,
+    organizer,
+    zones: publicZones,
+    seats: publicSeats,
+    totalAvailable,
+    ticketsSold: Number(sold?.n ?? 0),
+    // Read the clock here so pages stay free of impure calls during render.
+    nowSec: Math.floor(Date.now() / 1000),
+  };
 }

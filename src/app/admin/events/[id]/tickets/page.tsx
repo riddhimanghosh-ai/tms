@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { events, seats, tickets, zones } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { zoneAvailability } from "@/lib/inventory";
+import type { ZoneShape } from "@/lib/seat-layout";
 import { ZoneManager } from "./zone-manager";
 
 export default async function TicketsPage({
@@ -39,13 +40,10 @@ export default async function TicketsPage({
 
   return (
     <ZoneManager
-      event={{
-        id: event.id,
-        layoutType: event.layoutType,
-        currency: event.currency,
-      }}
+      event={{ id: event.id, layoutType: event.layoutType, currency: event.currency }}
       zones={zoneRows.map((z) => ({
         ...z,
+        shape: z.shape as ZoneShape,
         sold: avail.get(z.id)?.sold ?? 0,
         capacityResolved: avail.get(z.id)?.capacity ?? z.capacity,
       }))}
@@ -55,7 +53,16 @@ export default async function TicketsPage({
         label: s.label,
         rowLabel: s.rowLabel,
         seatNumber: s.seatNumber,
-        status: soldSeatIds.has(s.id) ? "sold" : s.status,
+        ringIndex: s.ringIndex,
+        posInRing: s.posInRing,
+        ringSize: s.ringSize,
+        x: s.x,
+        y: s.y,
+        state: soldSeatIds.has(s.id)
+          ? ("sold" as const)
+          : s.status === "blocked"
+            ? ("blocked" as const)
+            : ("available" as const),
       }))}
     />
   );

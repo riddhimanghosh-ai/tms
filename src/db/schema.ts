@@ -92,6 +92,13 @@ export const zones = sqliteTable(
     name: text("name").notNull(),
     description: text("description"),
     kind: text("kind").notNull().default("open"), // open | seated
+    /**
+     * How a seated zone is laid out on screen and how its seats are generated:
+     *   grid  — straight rows of seats (auditorium, blocks)
+     *   rings — concentric circles around a centre point (akhada, garba ground)
+     *   arc   — curved rows fanning around a stage (amphitheatre)
+     */
+    shape: text("shape").notNull().default("grid"),
     priceMinor: integer("price_minor").notNull().default(0),
     /** Struck-through "was" price, purely cosmetic. */
     compareAtMinor: integer("compare_at_minor"),
@@ -104,6 +111,18 @@ export const zones = sqliteTable(
     color: text("color").notNull().default("#e11d48"),
     rows: integer("rows").notNull().default(0),
     cols: integer("cols").notNull().default(0),
+    /** rings/arc: how many concentric layers, counted outwards. */
+    ringCount: integer("ring_count").notNull().default(0),
+    /** rings/arc: seats in the innermost layer. */
+    ringStartSeats: integer("ring_start_seats").notNull().default(12),
+    /** rings/arc: extra seats added to each layer as it grows outwards. */
+    ringSeatStep: integer("ring_seat_step").notNull().default(6),
+    /** rings/arc: degrees the layers sweep. 360 = full circle, 180 = half. */
+    arcSpanDeg: integer("arc_span_deg").notNull().default(360),
+    /** rings/arc: where the sweep starts, so an arc can face the stage. */
+    arcStartDeg: integer("arc_start_deg").notNull().default(0),
+    /** rings/arc: empty space in the middle, as a share of the radius (0-90). */
+    innerHolePct: integer("inner_hole_pct").notNull().default(35),
     salesStartAt: integer("sales_start_at"),
     salesEndAt: integer("sales_end_at"),
     active: integer("active").notNull().default(1),
@@ -127,8 +146,15 @@ export const seats = sqliteTable(
     label: text("label").notNull(),
     /** available | blocked — "sold" is derived from tickets, never stored here. */
     status: text("status").notNull().default("available"),
+    /** Grid coordinates. For rings these mirror ringIndex / posInRing. */
     x: integer("x").notNull().default(0),
     y: integer("y").notNull().default(0),
+    /** rings/arc: which layer this seat sits on, 0 = innermost. */
+    ringIndex: integer("ring_index").notNull().default(0),
+    /** rings/arc: position along that layer, 0-based. */
+    posInRing: integer("pos_in_ring").notNull().default(0),
+    /** rings/arc: how many seats that layer holds, so geometry is stable. */
+    ringSize: integer("ring_size").notNull().default(0),
   },
   (t) => [
     index("seats_zone_idx").on(t.zoneId),

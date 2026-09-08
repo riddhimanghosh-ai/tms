@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadPublicEvent } from "@/lib/public-event";
-import { BookingWidget } from "@/components/booking/booking-widget";
-import { ViewTracker } from "@/components/booking/view-tracker";
 import { formatMinor } from "@/lib/money";
+import { Countdown } from "@/components/booking/countdown";
+import { UrgencyStrip, urgencySignals } from "@/components/booking/urgency";
+import { ViewTracker } from "@/components/booking/view-tracker";
 
 type Props = {
   params: Promise<{ org: string; event: string }>;
@@ -26,143 +28,296 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
   const data = await loadPublicEvent(org, eventSlug);
   if (!data) notFound();
 
-  const { event, organizer, zones, seats } = data;
-  const cheapest = zones.filter((z) => !z.soldOut).sort((a, b) => a.priceMinor - b.priceMinor)[0];
+  const { event, organizer, zones, ticketsSold } = data;
+  const onSale = event.status === "published";
   const start = new Date(event.startsAt * 1000);
+  const cheapest = zones.filter((z) => !z.soldOut).sort((a, b) => a.priceMinor - b.priceMinor)[0];
+
+  const query = new URLSearchParams();
+  if (ref) query.set("ref", ref);
+  if (code) query.set("code", code);
+  const bookHref = `/e/${org}/${eventSlug}/book${query.size ? `?${query}` : ""}`;
+
+  const signals = urgencySignals({
+    zones,
+    ticketsSold,
+    startsAt: event.startsAt,
+    nowSec: data.nowSec,
+  });
+
+  const facts = [
+    {
+      label: "Date",
+      value: start.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }),
+    },
+    {
+      label: "Doors",
+      value: new Date((event.doorsOpenAt ?? event.startsAt) * 1000).toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    },
+    { label: "Venue", value: event.venue ?? "To be announced" },
+    { label: "City", value: event.city ?? "—" },
+  ];
 
   return (
-    <div className="surface-light min-h-dvh">
+    <div className="surface-light min-h-dvh pb-24 lg:pb-0">
       <ViewTracker eventId={event.id} source="web" referral={ref ?? null} />
 
+      {/* Slim bar so the CTA is reachable from anywhere on the page. */}
+      <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center gap-3 px-5 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-900">{event.title}</p>
+            <p className="truncate text-xs text-slate-500">
+              {start.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+              {event.venue ? ` · ${event.venue}` : ""}
+            </p>
+          </div>
+          <Link
+            href={bookHref}
+            className="ml-auto hidden shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white sm:inline-block"
+            style={{ background: organizer.brandColor }}
+          >
+            {onSale ? "Book tickets" : "Notify me"}
+          </Link>
+        </div>
+      </nav>
+
       <header
-        className="relative overflow-hidden"
+        className="relative"
         style={{
           background: event.coverImageUrl
-            ? `linear-gradient(180deg, rgba(10,8,15,.45), rgba(10,8,15,.85)), url(${event.coverImageUrl}) center/cover`
-            : `linear-gradient(140deg, ${organizer.brandColor}, #16121f 70%)`,
+            ? `linear-gradient(180deg, rgba(10,8,15,.5), rgba(10,8,15,.9)), url(${event.coverImageUrl}) center/cover`
+            : `linear-gradient(140deg, ${organizer.brandColor}, #16121f 72%)`,
         }}
       >
-        <div className="mx-auto max-w-5xl px-5 py-16 sm:py-24">
+        <div className="mx-auto max-w-5xl px-5 py-14 sm:py-20">
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-white/70">
             {organizer.name}
           </p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-5xl">
+          <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-6xl">
             {event.title}
           </h1>
           {event.tagline ? (
-            <p className="mt-3 max-w-2xl text-lg text-white/85">{event.tagline}</p>
+            <p className="mt-4 max-w-2xl text-lg leading-relaxed text-white/85">{event.tagline}</p>
           ) : null}
 
-          <dl className="mt-8 flex flex-wrap gap-x-10 gap-y-4 text-white/90">
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-white/60">When</dt>
-              <dd className="mt-0.5 font-medium">
-                {start.toLocaleDateString("en-IN", {
-                  weekday: "short",
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-                {" · "}
-                {start.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-              </dd>
-            </div>
-            {event.venue ? (
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-white/60">Where</dt>
-                <dd className="mt-0.5 font-medium">
-                  {event.venue}
-                  {event.city ? `, ${event.city}` : ""}
-                </dd>
-              </div>
-            ) : null}
+          <div className="mt-8 max-w-md">
+            <Countdown targetSec={event.startsAt} tone="dark" label="Doors open in" />
+          </div>
+
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link
+              href={bookHref}
+              className="rounded-xl px-7 py-4 text-base font-semibold text-white shadow-lg transition hover:brightness-110"
+              style={{ background: organizer.brandColor }}
+            >
+              {onSale ? "Book tickets" : "Tickets coming soon"}
+            </Link>
             {cheapest ? (
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-white/60">From</dt>
-                <dd className="mt-0.5 font-medium">{formatMinor(cheapest.priceMinor)}</dd>
-              </div>
+              <p className="text-white/85">
+                From{" "}
+                <span className="text-xl font-semibold text-white">
+                  {formatMinor(cheapest.priceMinor)}
+                </span>
+              </p>
             ) : null}
-          </dl>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-5xl gap-8 px-5 py-10 lg:grid-cols-[1fr_400px] lg:items-start">
-        <div className="space-y-8 lg:order-1">
-          {event.description ? (
-            <section>
-              <h2 className="text-lg font-semibold text-slate-900">About this event</h2>
-              <p className="mt-2 whitespace-pre-line leading-relaxed text-slate-600">
-                {event.description}
-              </p>
-            </section>
-          ) : null}
+      {signals.length ? (
+        <div className="border-b border-slate-200 bg-white">
+          <div className="mx-auto max-w-5xl px-5 py-4">
+            <UrgencyStrip signals={signals} />
+          </div>
+        </div>
+      ) : null}
 
-          {event.address ? (
-            <section>
-              <h2 className="text-lg font-semibold text-slate-900">Getting there</h2>
-              <p className="mt-2 text-slate-600">{event.address}</p>
-              <a
-                href={`https://maps.google.com/?q=${encodeURIComponent(event.address)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 inline-block text-sm font-medium underline"
-                style={{ color: organizer.brandColor }}
-              >
-                Open in Maps ↗
-              </a>
-            </section>
-          ) : null}
+      <main className="mx-auto max-w-5xl space-y-12 px-5 py-12">
+        <section>
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 sm:grid-cols-4">
+            {facts.map((f) => (
+              <div key={f.label} className="bg-white p-4">
+                <dt className="text-xs uppercase tracking-wide text-slate-400">{f.label}</dt>
+                <dd className="mt-1 font-medium text-slate-900">{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
 
+        {event.description ? (
           <section>
-            <h2 className="text-lg font-semibold text-slate-900">What&apos;s on offer</h2>
-            <ul className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">
-              {zones.map((z) => (
-                <li key={z.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                  <div>
-                    <p className="font-medium text-slate-900">{z.name}</p>
-                    {z.description ? (
-                      <p className="text-sm text-slate-500">{z.description}</p>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+              About this event
+            </h2>
+            <p className="mt-3 max-w-3xl whitespace-pre-line text-lg leading-relaxed text-slate-600">
+              {event.description}
+            </p>
+          </section>
+        ) : null}
+
+        <section id="tickets">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Passes</h2>
+              <p className="mt-1 text-slate-500">
+                {event.layoutType === "seated"
+                  ? "Pick your exact seat at the next step."
+                  : "Choose a category and how many you need."}
+              </p>
+            </div>
+            <Link
+              href={bookHref}
+              className="rounded-lg px-4 py-2.5 text-sm font-semibold text-white"
+              style={{ background: organizer.brandColor }}
+            >
+              Book tickets
+            </Link>
+          </div>
+
+          <ul className="mt-5 grid gap-3 sm:grid-cols-2">
+            {zones.map((z) => {
+              const scarce = !z.soldOut && z.available <= 25;
+              return (
+                <li
+                  key={z.id}
+                  className={`rounded-2xl border p-5 transition ${
+                    z.soldOut ? "border-slate-200 bg-slate-50" : "border-slate-200 bg-white hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-900">
+                        <span
+                          className="size-2.5 rounded-full"
+                          style={{ background: z.color }}
+                        />
+                        {z.name}
+                        {z.admitsCount > 1 ? (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                            admits {z.admitsCount}
+                          </span>
+                        ) : null}
+                      </p>
+                      {z.description ? (
+                        <p className="mt-1.5 text-sm leading-relaxed text-slate-500">
+                          {z.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-lg font-semibold text-slate-900">
+                        {formatMinor(z.priceMinor)}
+                      </p>
+                      {z.compareAtMinor ? (
+                        <p className="text-sm text-slate-400 line-through">
+                          {formatMinor(z.compareAtMinor)}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    {z.soldOut ? (
+                      <span className="text-sm font-medium text-slate-400">Sold out</span>
+                    ) : scarce ? (
+                      <span className="text-sm font-medium text-rose-600">
+                        Only {z.available} left
+                      </span>
+                    ) : (
+                      <span className="text-sm text-emerald-600">Available</span>
+                    )}
+                    {!z.soldOut ? (
+                      <Link
+                        href={bookHref}
+                        className="rounded-lg border border-slate-300 px-3.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Book
+                      </Link>
                     ) : null}
                   </div>
-                  <p className="shrink-0 text-sm font-semibold text-slate-900">
-                    {z.soldOut ? (
-                      <span className="text-slate-400">Sold out</span>
-                    ) : (
-                      formatMinor(z.priceMinor)
-                    )}
-                  </p>
                 </li>
-              ))}
-            </ul>
+              );
+            })}
+          </ul>
+        </section>
+
+        {event.address ? (
+          <section>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Getting there</h2>
+            <p className="mt-3 text-lg text-slate-600">{event.address}</p>
+            <a
+              href={`https://maps.google.com/?q=${encodeURIComponent(event.address)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-block font-medium underline"
+              style={{ color: organizer.brandColor }}
+            >
+              Open in Maps ↗
+            </a>
           </section>
+        ) : null}
 
-          {event.terms ? (
-            <section>
-              <h2 className="text-lg font-semibold text-slate-900">Terms</h2>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500">{event.terms}</p>
-            </section>
+        {event.terms ? (
+          <section>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Good to know</h2>
+            <p className="mt-3 max-w-3xl leading-relaxed text-slate-500">{event.terms}</p>
+          </section>
+        ) : null}
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+            {onSale ? "Ready to join?" : "Tickets aren't on sale yet"}
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-slate-500">
+            {onSale
+              ? "Passes are issued instantly with a QR you can show at the gate."
+              : "Booking opens shortly — check back soon."}
+          </p>
+          <Link
+            href={bookHref}
+            className="mt-6 inline-block rounded-xl px-8 py-4 text-base font-semibold text-white"
+            style={{ background: organizer.brandColor }}
+          >
+            {onSale ? "Book tickets" : "See ticket options"}
+          </Link>
+          {organizer.supportPhone ? (
+            <p className="mt-4 text-sm text-slate-500">
+              Questions? WhatsApp{" "}
+              <a
+                href={`https://wa.me/${organizer.supportPhone.replace(/\D/g, "")}`}
+                className="underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {organizer.supportPhone}
+              </a>
+            </p>
           ) : null}
-        </div>
-
-        <div className="lg:sticky lg:top-6 lg:order-2">
-          <BookingWidget
-            event={{
-              id: event.id,
-              title: event.title,
-              layoutType: event.layoutType,
-              maxTicketsPerOrder: event.maxTicketsPerOrder,
-              status: event.status,
-              terms: event.terms,
-            }}
-            zones={zones}
-            seats={seats}
-            brandColor={organizer.brandColor}
-            initialCode={ref ?? code ?? null}
-            channel="web"
-            supportPhone={organizer.supportPhone}
-          />
-        </div>
+        </section>
       </main>
+
+      {/* Mobile: the CTA follows the reader down the page. */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-5xl items-center gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-slate-500">From</p>
+            <p className="font-semibold text-slate-900">
+              {cheapest ? formatMinor(cheapest.priceMinor) : "Sold out"}
+            </p>
+          </div>
+          <Link
+            href={bookHref}
+            className="ml-auto flex-1 rounded-xl px-5 py-3.5 text-center text-base font-semibold text-white"
+            style={{ background: organizer.brandColor }}
+          >
+            {onSale ? "Book tickets" : "See options"}
+          </Link>
+        </div>
+      </div>
 
       <footer className="border-t border-slate-200 px-5 py-6 text-center text-xs text-slate-400">
         Booking powered by Gathara for {organizer.name}

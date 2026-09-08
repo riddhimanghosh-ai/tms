@@ -15,6 +15,13 @@ import {
 import { requireOrganizer } from "@/lib/auth";
 import { id, slugify } from "@/lib/ids";
 import { rupeesToMinor } from "@/lib/money";
+import {
+  ringSeatLabel,
+  ringRowLabel,
+  ringSizes,
+  type RingConfig,
+  type ZoneShape,
+} from "@/lib/seat-layout";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const num = (f: FormData, k: string, d = 0) => {
@@ -60,7 +67,13 @@ export async function createEvent(_prev: unknown, form: FormData) {
   }
 
   const eventId = id();
-  const layoutType = str(form, "layoutType") === "seated" ? "seated" : "open";
+
+  // One picker on the create screen chooses both the admission model and the
+  // shape of the first block, so a new event is never left un-sellable.
+  const template = str(form, "venueLayout") || "open";
+  const seated = template !== "open";
+  const shape: ZoneShape =
+    template === "rings" ? "rings" : template === "arc" ? "arc" : "grid";
 
   await db.insert(events).values({
     id: eventId,
@@ -72,23 +85,51 @@ export async function createEvent(_prev: unknown, form: FormData) {
     city: str(form, "city") || null,
     startsAt,
     endsAt: ts(form, "endsAt"),
-    layoutType,
+    layoutType: seated ? "seated" : "open",
     status: "draft",
     gatePin: String(Math.floor(1000 + Math.random() * 9000)),
   });
 
-  // A brand-new event with no tickets can't sell, so seed one sensible tier.
+  const zoneId = id();
+  const ring: RingConfig = {
+    shape,
+    ringCount: seated && shape !== "grid" ? 6 : 0,
+    ringStartSeats: 12,
+    ringSeatStep: 6,
+    arcSpanDeg: shape === "arc" ? 200 : 360,
+    arcStartDeg: shape === "arc" ? 260 : 0,
+    innerHolePct: 35,
+  };
+  const rows = shape === "grid" && seated ? 8 : 0;
+  const cols = shape === "grid" && seated ? 14 : 0;
+  const seatTotal = seated
+    ? shape === "grid"
+      ? rows * cols
+      : ringSizes(ring).reduce((n, x) => n + x, 0)
+    : 500;
+
   await db.insert(zones).values({
-    id: id(),
+    id: zoneId,
     eventId,
-    name: layoutType === "seated" ? "General" : "General Entry",
-    kind: layoutType,
+    name: seated ? "General" : "General Entry",
+    kind: seated ? "seated" : "open",
+    shape,
     priceMinor: 50000,
-    capacity: layoutType === "seated" ? 0 : 500,
+    capacity: seatTotal,
     color: "#3987e5",
-    rows: layoutType === "seated" ? 10 : 0,
-    cols: layoutType === "seated" ? 12 : 0,
+    rows,
+    cols,
+    ringCount: ring.ringCount,
+    ringStartSeats: ring.ringStartSeats,
+    ringSeatStep: ring.ringSeatStep,
+    arcSpanDeg: ring.arcSpanDeg,
+    arcStartDeg: ring.arcStartDeg,
+    innerHolePct: ring.innerHolePct,
   });
+
+  if (seated) {
+    regenerateSeats({ zoneId, eventId, shape, rows, cols, rowStart: "A", ring });
+  }
 
   redirect(`/admin/events/${eventId}/tickets`);
 }
@@ -144,23 +185,52 @@ export async function saveZone(_prev: unknown, form: FormData) {
   if (!name) return { error: "Name this ticket type." };
 
   const kind = event.layoutType === "seated" ? "seated" : "open";
-  const rows = Math.max(0, num(form, "rows"));
-  const cols = Math.max(0, num(form, "cols"));
+  const rawShape = str(form, "shape");
+  const shape: ZoneShape =
+    rawShape === "rings" || rawShape === "arc" ? rawShape : "grid";
+
+  const rows = Math.max(0, Math.min(60, num(form, "rows")));
+  const cols = Math.max(0, Math.min(80, num(form, "cols")));
+
+  const ring: RingConfig = {
+    shape,
+    ringCount: Math.max(0, Math.min(40, num(form, "ringCount"))),
+    ringStartSeats: Math.max(1, Math.min(200, num(form, "ringStartSeats", 12))),
+    ringSeatStep: Math.max(0, Math.min(60, num(form, "ringSeatStep", 6))),
+    arcSpanDeg: Math.max(10, Math.min(360, num(form, "arcSpanDeg", 360))),
+    arcStartDeg: ((num(form, "arcStartDeg") % 360) + 360) % 360,
+    innerHolePct: Math.max(0, Math.min(90, num(form, "innerHolePct", 35))),
+  };
+
+  const seatTotal =
+    kind !== "seated" ? 0 : shape === "grid" ? rows * cols : ringSizes(ring).reduce((n, x) => n + x, 0);
+
+  if (kind === "seated" && seatTotal === 0)
+    return { error: "This block has no seats yet — set its size below." };
+  if (seatTotal > 4000)
+    return { error: "That's over 4,000 seats in one block. Split it into a few blocks." };
 
   const values = {
     eventId,
     name,
     description: str(form, "description") || null,
     kind,
+    shape,
     priceMinor: rupeesToMinor(num(form, "price")),
     compareAtMinor: num(form, "compareAt") ? rupeesToMinor(num(form, "compareAt")) : null,
-    capacity: kind === "seated" ? rows * cols : Math.max(0, num(form, "capacity")),
+    capacity: kind === "seated" ? seatTotal : Math.max(0, num(form, "capacity")),
     admitsCount: Math.max(1, num(form, "admitsCount", 1)),
     minPerOrder: Math.max(1, num(form, "minPerOrder", 1)),
     maxPerOrder: Math.max(1, num(form, "maxPerOrder", 10)),
     color: str(form, "color") || "#3987e5",
     rows,
     cols,
+    ringCount: ring.ringCount,
+    ringStartSeats: ring.ringStartSeats,
+    ringSeatStep: ring.ringSeatStep,
+    arcSpanDeg: ring.arcSpanDeg,
+    arcStartDeg: ring.arcStartDeg,
+    innerHolePct: ring.innerHolePct,
     salesEndAt: ts(form, "salesEndAt"),
     active: form.get("active") ? 1 : 0,
     sortOrder: num(form, "sortOrder"),
@@ -173,23 +243,94 @@ export async function saveZone(_prev: unknown, form: FormData) {
     await db.insert(zones).values({ id: targetId, ...values });
   }
 
-  if (kind === "seated") await regenerateSeats(targetId, eventId, rows, cols, str(form, "rowStart") || "A");
+  if (kind === "seated") {
+    regenerateSeats({
+      zoneId: targetId,
+      eventId,
+      shape,
+      rows,
+      cols,
+      rowStart: str(form, "rowStart") || "A",
+      ring,
+    });
+  }
 
   revalidatePath(`/admin/events/${eventId}/tickets`);
   return { ok: true as const, savedAt: Date.now() };
 }
 
+type SeatSpec = {
+  label: string;
+  rowLabel: string;
+  seatNumber: number;
+  x: number;
+  y: number;
+  ringIndex: number;
+  posInRing: number;
+  ringSize: number;
+};
+
+/** The seats a zone's current configuration should contain. */
+function plannedSeats(args: {
+  shape: ZoneShape;
+  rows: number;
+  cols: number;
+  rowStart: string;
+  ring: RingConfig;
+}): SeatSpec[] {
+  const { shape, rows, cols, rowStart, ring } = args;
+  const out: SeatSpec[] = [];
+
+  if (shape === "grid") {
+    for (let r = 0; r < rows; r++) {
+      const rowLabel = String.fromCharCode(rowStart.charCodeAt(0) + r);
+      for (let c = 1; c <= cols; c++) {
+        out.push({
+          label: `${rowLabel}${c}`,
+          rowLabel,
+          seatNumber: c,
+          x: c,
+          y: r,
+          ringIndex: 0,
+          posInRing: 0,
+          ringSize: 0,
+        });
+      }
+    }
+    return out;
+  }
+
+  ringSizes(ring).forEach((size, ringIndex) => {
+    for (let pos = 0; pos < size; pos++) {
+      out.push({
+        label: ringSeatLabel(ringIndex, pos),
+        rowLabel: ringRowLabel(ringIndex),
+        seatNumber: pos + 1,
+        x: pos,
+        y: ringIndex,
+        ringIndex,
+        posInRing: pos,
+        ringSize: size,
+      });
+    }
+  });
+  return out;
+}
+
 /**
- * Rebuilds a zone's seat grid. Seats already attached to a ticket are kept so
- * a layout tweak can never orphan someone's booking.
+ * Rebuilds a zone's seats to match its configuration. Seats already attached
+ * to a ticket are kept, so changing a layout can never orphan a booking.
  */
-async function regenerateSeats(
-  zoneId: string,
-  eventId: string,
-  rows: number,
-  cols: number,
-  rowStart: string,
-) {
+function regenerateSeats(args: {
+  zoneId: string;
+  eventId: string;
+  shape: ZoneShape;
+  rows: number;
+  cols: number;
+  rowStart: string;
+  ring: RingConfig;
+}) {
+  const { zoneId, eventId } = args;
   const existing = db.select().from(seats).where(eq(seats.zoneId, zoneId)).all();
   const sold = new Set(
     db
@@ -201,29 +342,40 @@ async function regenerateSeats(
       .filter(Boolean) as string[],
   );
 
-  const wanted = new Set<string>();
-  for (let r = 0; r < rows; r++) {
-    const rowLabel = String.fromCharCode(rowStart.charCodeAt(0) + r);
-    for (let c = 1; c <= cols; c++) wanted.add(`${rowLabel}${c}`);
-  }
+  const planned = plannedSeats(args);
+  const wanted = new Map(planned.map((p) => [p.label, p]));
+  const have = new Map(existing.map((s) => [s.label, s]));
 
-  for (const seat of existing) {
-    if (!wanted.has(seat.label) && !sold.has(seat.id)) {
-      db.delete(seats).where(eq(seats.id, seat.id)).run();
+  db.transaction((tx) => {
+    for (const seat of existing) {
+      if (!wanted.has(seat.label) && !sold.has(seat.id)) {
+        tx.delete(seats).where(eq(seats.id, seat.id)).run();
+      }
     }
-  }
 
-  const have = new Set(existing.map((s) => s.label));
-  for (let r = 0; r < rows; r++) {
-    const rowLabel = String.fromCharCode(rowStart.charCodeAt(0) + r);
-    for (let c = 1; c <= cols; c++) {
-      const label = `${rowLabel}${c}`;
-      if (have.has(label)) continue;
-      db.insert(seats)
-        .values({ id: id(), zoneId, eventId, rowLabel, seatNumber: c, label, x: c, y: r })
+    for (const spec of planned) {
+      const current = have.get(spec.label);
+      if (current) {
+        // Geometry can shift when a layer is resized; keep the seat, move it.
+        tx.update(seats)
+          .set({
+            rowLabel: spec.rowLabel,
+            seatNumber: spec.seatNumber,
+            x: spec.x,
+            y: spec.y,
+            ringIndex: spec.ringIndex,
+            posInRing: spec.posInRing,
+            ringSize: spec.ringSize,
+          })
+          .where(eq(seats.id, current.id))
+          .run();
+        continue;
+      }
+      tx.insert(seats)
+        .values({ id: id(), zoneId, eventId, status: "available", ...spec })
         .run();
     }
-  }
+  });
 }
 
 export async function deleteZone(zoneId: string) {

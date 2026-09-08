@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { priceCart, startCheckout } from "@/app/e/actions";
 import type { CartLine } from "@/lib/pricing";
+import type { RingConfig } from "@/lib/seat-layout";
 import { formatMinor } from "@/lib/money";
 import { SeatPicker } from "./seat-picker";
 
-export type PublicZone = {
+export type PublicZone = RingConfig & {
   id: string;
   name: string;
   description: string | null;
@@ -17,6 +18,8 @@ export type PublicZone = {
   minPerOrder: number;
   maxPerOrder: number;
   color: string;
+  rows: number;
+  cols: number;
   available: number;
   soldOut: boolean;
 };
@@ -27,6 +30,11 @@ export type PublicSeat = {
   label: string;
   rowLabel: string;
   seatNumber: number;
+  ringIndex: number;
+  posInRing: number;
+  ringSize: number;
+  x: number;
+  y: number;
   taken: boolean;
 };
 

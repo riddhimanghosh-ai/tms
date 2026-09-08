@@ -24,8 +24,9 @@ Open http://localhost:3000
 |---|---|
 | `/` | Marketing page for the product itself |
 | `/admin/login` | Organiser dashboard — **organiser@demo.in / demo1234** |
-| `/e/rhythm-events/navratri-nights-2026` | Open-ground booking page (priced categories) |
-| `/e/rhythm-events/dandiya-finale-live` | Reserved-seating booking page (seat map) |
+| `/e/rhythm-events/navratri-nights-2026` | Open-ground landing page → priced categories |
+| `/e/rhythm-events/dandiya-finale-live` | Reserved seating, straight rows |
+| `/e/rhythm-events/raas-in-the-round` | Reserved seating, **concentric rings** |
 
 `pnpm db:reset` wipes the database and re-seeds it.
 `pnpm check:booking` exercises the booking core — pricing, codes, holds,
@@ -35,11 +36,27 @@ oversell and seat-clash protection — against the real database.
 
 ## What's built
 
-### Booking page (the buyer side)
+### The buyer journey
 
-- **Two admission models.** *Open ground* — priced categories with capacities
-  and a quantity stepper. *Reserved seating* — a seat map per block, tap to pick.
-  The organiser chooses per event; the same widget handles both.
+It is deliberately two steps, not one.
+
+1. **Landing page** (`/e/<org>/<event>`) — hero, live countdown to doors, a
+   scarcity strip built from real inventory ("Only 12 VIP left", "1,240 passes
+   already booked", "Booking closes tomorrow"), event facts, description, a
+   priced pass list, venue with a Maps link, and a CTA that follows the reader
+   down the page on mobile.
+2. **Booking page** (`/e/<org>/<event>/book`) — the picker, with a context rail
+   that keeps the date, countdown and the three steps in view while choosing.
+
+Embeds skip step 1 and mount the picker directly, since the organiser's own page
+is already doing the selling.
+
+- **Three seating shapes, plus open ground.**
+  *Rows & blocks* — straight numbered rows.
+  *Concentric rings* — circles inside circles around a centre, any number of
+  layers, each layer priceable separately.
+  *Curved arc* — layers fanning around a stage, with an adjustable sweep.
+  Shapes are per block, so one event can mix a ringed floor with tiered stands.
 - **Couple and family passes** — a category can admit more than one person per
   ticket, which the gate scanner shows on scan.
 - **Codes at checkout** — discount codes and referral codes share one input box.
@@ -74,8 +91,10 @@ complete landing page, and the dashboard has a one-tap WhatsApp share.
   conversion.
 - **Tickets & seating** — create categories or seating blocks, set price, "was"
   price, capacity, admits-per-ticket, per-order min/max, sales cut-off and
-  colour. Seated blocks generate a seat grid; click any seat to block it.
-  Regenerating a layout never orphans a seat that's already sold.
+  colour. Seated blocks pick a shape and get a **live preview that redraws as
+  you type** — layers, seats in the first layer, growth per layer, empty centre,
+  arc sweep and facing. Click any seat to block it. Regenerating a layout keeps
+  every seat that's already sold, so a tweak can never orphan a booking.
 - **Codes** — percentage, flat ₹, capped percentage, minimum tickets, minimum
   order, total redemption limit, per-phone limit, category-scoped, expiry, and
   hidden "special" passes for sponsors and guests. Referral codes carry a buyer
@@ -103,17 +122,27 @@ src/
     booking.ts        pending order → payment → issued tickets
     payments.ts       provider seam (mock / Razorpay)
     analytics.ts      every dashboard number, in one pass
+  lib/seat-layout.ts  seat geometry — the single source both the editor and
+                      the buyer's picker draw from, so they cannot disagree
   components/
     charts.tsx        SVG charts on a CVD-validated categorical palette
-    booking/          the buyer-facing widget and seat picker
+    seat-map.tsx      one SVG renderer for grid, rings and arc layouts
+    booking/          the buyer-facing widget, countdown and urgency strip
   app/
-    e/[org]/[event]   public landing page
+    e/[org]/[event]        landing page
+    e/[org]/[event]/book   the booking step
     embed/…           bare booking surface for iframes
     embed.js          the loader script organisers paste
     admin/…           the dashboard
 ```
 
 **Money** is stored as integer paise everywhere; nothing is a float.
+
+**Seat geometry lives in one module.** `seat-layout.ts` turns a block's config
+into positions in a fixed 1000×1000 viewBox. The seat generator, the organiser's
+editor and the buyer's picker all call it, so what an organiser arranges is
+pixel-for-pixel what a buyer taps — and the map scales to any width without
+recomputing anything.
 
 **Overselling** is prevented by `seat_holds`. Adding to a cart reserves
 inventory for 8 minutes inside a transaction that re-checks availability, so

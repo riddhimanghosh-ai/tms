@@ -17,6 +17,7 @@ import {
   zones,
 } from "../src/db/schema";
 import { hashPassword } from "../src/lib/auth";
+import { ringSeatLabel, ringRowLabel, ringSizes } from "../src/lib/seat-layout";
 import { id, orderPublicId, ticketCode } from "../src/lib/ids";
 
 const DAY = 86400;
@@ -132,6 +133,7 @@ seatedZones.forEach((z, zi) => {
       eventId: concertId,
       name: z.name,
       kind: "seated",
+      shape: "grid",
       priceMinor: z.price,
       capacity: z.rows * z.cols,
       color: z.color,
@@ -159,6 +161,92 @@ seatedZones.forEach((z, zi) => {
         .run();
     }
   }
+});
+
+
+/* ---------------------------------------------------------------- event 3 */
+const akhadaId = id();
+db.insert(events)
+  .values({
+    id: akhadaId,
+    organizerId: orgId,
+    slug: "raas-in-the-round",
+    title: "Raas in the Round",
+    tagline: "Centre stage. Rings of dancers. One unbroken circle.",
+    description:
+      "A single circular arena with the dhol at the centre and dancers in concentric rings. Inner rings are closest to the drums; outer rings have the most room to move.",
+    venue: "Riverfront Arena",
+    city: "Ahmedabad",
+    address: "Sabarmati Riverfront, Ahmedabad, Gujarat",
+    startsAt: now + 27 * DAY,
+    layoutType: "seated",
+    status: "published",
+    bookingFeeBps: 200,
+    maxTicketsPerOrder: 8,
+    gatePin: "7788",
+    terms: "Traditional dress required. Entry only with a valid QR pass.",
+  })
+  .run();
+
+const ringZones = [
+  { name: "Inner Circle", price: 449900, ringCount: 3, start: 14, step: 8, hole: 22, color: "#d55181" },
+  { name: "Middle Rings", price: 249900, ringCount: 4, start: 44, step: 10, hole: 46, color: "#c98500" },
+  { name: "Outer Rings", price: 129900, ringCount: 4, start: 90, step: 14, hole: 70, color: "#199e70" },
+];
+const akhadaZoneIds: string[] = [];
+ringZones.forEach((z, zi) => {
+  const zid = id();
+  akhadaZoneIds.push(zid);
+  const cfg = {
+    shape: "rings" as const,
+    ringCount: z.ringCount,
+    ringStartSeats: z.start,
+    ringSeatStep: z.step,
+    arcSpanDeg: 360,
+    arcStartDeg: 0,
+    innerHolePct: z.hole,
+  };
+  const sizes = ringSizes(cfg);
+  db.insert(zones)
+    .values({
+      id: zid,
+      eventId: akhadaId,
+      name: z.name,
+      kind: "seated",
+      shape: "rings",
+      priceMinor: z.price,
+      capacity: sizes.reduce((n, x) => n + x, 0),
+      color: z.color,
+      maxPerOrder: 8,
+      ringCount: cfg.ringCount,
+      ringStartSeats: cfg.ringStartSeats,
+      ringSeatStep: cfg.ringSeatStep,
+      arcSpanDeg: cfg.arcSpanDeg,
+      arcStartDeg: cfg.arcStartDeg,
+      innerHolePct: cfg.innerHolePct,
+      sortOrder: zi,
+    })
+    .run();
+
+  sizes.forEach((size, ringIndex) => {
+    for (let pos = 0; pos < size; pos++) {
+      db.insert(seats)
+        .values({
+          id: id(),
+          zoneId: zid,
+          eventId: akhadaId,
+          rowLabel: ringRowLabel(ringIndex),
+          seatNumber: pos + 1,
+          label: ringSeatLabel(ringIndex, pos),
+          x: pos,
+          y: ringIndex,
+          ringIndex,
+          posInRing: pos,
+          ringSize: size,
+        })
+        .run();
+    }
+  });
 });
 
 /* ----------------------------------------------------------------- codes */
@@ -322,12 +410,14 @@ for (let daysAgo = 21; daysAgo >= 0; daysAgo--) {
   for (let i = 0; i < heat; i++) makeOrder(garbaId, garbaZoneIds, daysAgo, false);
   for (let i = 0; i < Math.round(heat / 3); i++)
     makeOrder(concertId, concertZoneIds, daysAgo, true);
+  for (let i = 0; i < Math.round(heat / 4); i++)
+    makeOrder(akhadaId, akhadaZoneIds, daysAgo, true);
 
   for (let v = 0; v < heat * 7; v++) {
     db.insert(pageViews)
       .values({
         id: id(),
-        eventId: Math.random() < 0.75 ? garbaId : concertId,
+        eventId: Math.random() < 0.6 ? garbaId : Math.random() < 0.5 ? concertId : akhadaId,
         source: rand(["web", "embed", "whatsapp"]),
         createdAt: now - daysAgo * DAY - Math.floor(Math.random() * DAY),
       })

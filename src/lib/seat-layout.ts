@@ -1,0 +1,137 @@
+/**
+ * Seat geometry, shared by three places that must agree exactly: the generator
+ * that writes seat rows, the organiser's editor, and the buyer's picker.
+ *
+ * Everything is produced in a fixed 1000×1000 viewBox so callers can scale the
+ * map to any width without recomputing positions.
+ */
+
+export type ZoneShape = "grid" | "rings" | "arc";
+
+export const SHAPES: {
+  value: ZoneShape;
+  title: string;
+  body: string;
+  bestFor: string;
+}[] = [
+  {
+    value: "grid",
+    title: "Rows & blocks",
+    body: "Straight rows of numbered seats, A1 upwards.",
+    bestFor: "Auditoriums, halls, stands",
+  },
+  {
+    value: "rings",
+    title: "Concentric rings",
+    body: "Circles inside circles around a centre. Add as many layers as you need.",
+    bestFor: "Garba grounds, akhada, in-the-round",
+  },
+  {
+    value: "arc",
+    title: "Curved arc",
+    body: "Layers that fan around a stage instead of closing into a full circle.",
+    bestFor: "Amphitheatres, open-air stages",
+  },
+];
+
+export const VIEW = 1000;
+const CENTRE = VIEW / 2;
+const OUTER_R = 468;
+
+export type RingConfig = {
+  shape: ZoneShape;
+  ringCount: number;
+  ringStartSeats: number;
+  ringSeatStep: number;
+  arcSpanDeg: number;
+  arcStartDeg: number;
+  innerHolePct: number;
+};
+
+/** Seats per layer, innermost first. Layers grow outwards. */
+export function ringSizes(cfg: RingConfig): number[] {
+  const count = Math.max(0, Math.min(40, cfg.ringCount));
+  const start = Math.max(1, cfg.ringStartSeats);
+  const step = Math.max(0, cfg.ringSeatStep);
+  return Array.from({ length: count }, (_, i) => start + step * i);
+}
+
+export function ringTotalSeats(cfg: RingConfig) {
+  return ringSizes(cfg).reduce((n, s) => n + s, 0);
+}
+
+export type SeatPoint = { x: number; y: number; angleDeg: number; r: number };
+
+/**
+ * Where one ring seat sits. A full 360° sweep spaces seats evenly with no
+ * duplicate at the seam; a partial arc includes both endpoints.
+ */
+export function ringSeatPoint(
+  cfg: RingConfig,
+  ringIndex: number,
+  posInRing: number,
+  ringSize: number,
+): SeatPoint {
+  const rings = Math.max(1, Math.min(40, cfg.ringCount));
+  const hole = Math.min(90, Math.max(0, cfg.innerHolePct)) / 100;
+  const innerR = OUTER_R * hole;
+  const radius =
+    rings === 1 ? (innerR + OUTER_R) / 2 : innerR + ((OUTER_R - innerR) * ringIndex) / (rings - 1);
+
+  const span = Math.max(10, Math.min(360, cfg.arcSpanDeg));
+  const full = span >= 360;
+  const angleDeg = full
+    ? cfg.arcStartDeg + (360 * posInRing) / Math.max(1, ringSize)
+    : ringSize > 1
+      ? cfg.arcStartDeg + (span * posInRing) / (ringSize - 1)
+      : cfg.arcStartDeg + span / 2;
+
+  // −90° so 0° points up, which is where a stage or centre marker reads best.
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return {
+    x: CENTRE + radius * Math.cos(rad),
+    y: CENTRE + radius * Math.sin(rad),
+    angleDeg,
+    r: seatRadius(cfg, radius, ringSize),
+  };
+}
+
+/** Seat dots shrink as a layer gets crowded, so they never overlap. */
+function seatRadius(cfg: RingConfig, radius: number, ringSize: number) {
+  const span = Math.max(10, Math.min(360, cfg.arcSpanDeg));
+  const arcLength = (2 * Math.PI * radius * span) / 360;
+  const perSeat = arcLength / Math.max(1, ringSize);
+  const rings = Math.max(1, cfg.ringCount);
+  const hole = Math.min(90, Math.max(0, cfg.innerHolePct)) / 100;
+  const bandGap = rings > 1 ? (OUTER_R * (1 - hole)) / (rings - 1) : OUTER_R;
+  return Math.max(3.5, Math.min(16, perSeat * 0.38, bandGap * 0.36));
+}
+
+/** Human label for a ring seat: R1-07, R2-14. */
+export function ringSeatLabel(ringIndex: number, posInRing: number) {
+  return `R${ringIndex + 1}-${String(posInRing + 1).padStart(2, "0")}`;
+}
+
+export function ringRowLabel(ringIndex: number) {
+  return `R${ringIndex + 1}`;
+}
+
+/** Grid seats mapped into the same viewBox so one renderer handles both. */
+export function gridSeatPoint(rows: number, cols: number, row: number, col: number): SeatPoint {
+  const pad = 40;
+  const usableW = VIEW - pad * 2;
+  const usableH = VIEW - pad * 2;
+  const stepX = cols > 1 ? usableW / (cols - 1) : 0;
+  const stepY = rows > 1 ? usableH / (rows - 1) : 0;
+  const size = Math.max(6, Math.min(22, usableW / Math.max(cols, 1) / 2.4, usableH / Math.max(rows, 1) / 2.4));
+  return {
+    x: pad + (cols > 1 ? col * stepX : usableW / 2),
+    y: pad + (rows > 1 ? row * stepY : usableH / 2),
+    angleDeg: 0,
+    r: size,
+  };
+}
+
+export function zoneSeatTotal(cfg: RingConfig & { rows: number; cols: number }) {
+  return cfg.shape === "grid" ? cfg.rows * cfg.cols : ringTotalSeats(cfg);
+}
