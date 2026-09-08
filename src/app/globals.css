@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+
+  --color-ink-950: #0b0a10;
+  --color-ink-900: #131119;
+  --color-ink-850: #191722;
+  --color-ink-800: #201d2b;
+  --color-ink-700: #2c2839;
+  --color-ink-600: #3d3852;
+  --color-ink-400: #7c7594;
+  --color-ink-300: #a49dbb;
+  --color-ink-200: #cdc8dc;
+  --color-ink-50: #f6f4fb;
+
+  --color-brand-50: #fff1f4;
+  --color-brand-200: #ffc9d5;
+  --color-brand-400: #fb6f8f;
+  --color-brand-500: #ef4066;
+  --color-brand-600: #e11d48;
+  --color-brand-700: #be123c;
+
+  --color-gold-400: #f7b955;
+  --color-gold-500: #e9a13b;
+
+  --radius-card: 14px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-50);
+}
+
+/* Light surface used by the public booking pages, which read better bright. */
+.surface-light {
+  color-scheme: light;
+  background: #fbfaff;
+  color: #1a1725;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--color-brand-600);
+  color: white;
+}
+
+/* Hide number input spinners — quantity is driven by +/- buttons. */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
