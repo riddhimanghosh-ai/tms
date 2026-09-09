@@ -26,7 +26,10 @@ Open http://localhost:3000
 | `/admin/login` | Organiser dashboard — **organiser@demo.in / demo1234** |
 | `/e/rhythm-events/navratri-nights-2026` | Open-ground landing page → priced categories |
 | `/e/rhythm-events/dandiya-finale-live` | Reserved seating, straight rows |
-| `/e/rhythm-events/raas-in-the-round` | Reserved seating, **concentric rings** |
+| `/e/rhythm-events/raas-in-the-round` | Reserved seating, **concentric rings**, 3 nights |
+
+The Navratri demo runs **nine nights**, so the buyer picks a night before
+picking passes, and the "Season Pass" category covers all nine at once.
 
 `pnpm db:reset` wipes the database and re-seeds it.
 `pnpm check:booking` exercises the booking core — pricing, codes, holds,
@@ -51,12 +54,23 @@ It is deliberately two steps, not one.
 Embeds skip step 1 and mount the picker directly, since the organiser's own page
 is already doing the selling.
 
+- **Multi-night events.** A Garba run is nine nights sold separately, so nights
+  are first-class: each has its own inventory, its own seat map state and its
+  own sales figures. The same seat can be booked on Night 1 and Night 2. A
+  category flagged as a **season pass** is sold once from a single pool and
+  covers every night. Single-night events never show a night picker.
 - **Three seating shapes, plus open ground.**
   *Rows & blocks* — straight numbered rows.
   *Concentric rings* — circles inside circles around a centre, any number of
   layers, each layer priceable separately.
   *Curved arc* — layers fanning around a stage, with an adjustable sweep.
   Shapes are per block, so one event can mix a ringed floor with tiered stands.
+- **A stage you place.** Name the focal point (STAGE, SCREEN, DHOL, CENTRE…),
+  put it top / bottom / left / right / centre, and draw it as a bar, a curved
+  screen or a centre circle — with a live preview in settings.
+- **Per-layer colours and descriptions.** Every ring or row can carry its own
+  colour and a one-line note ("Right at the dhol — loudest, fastest ring"),
+  which shows in the map legend and when a buyer hovers a seat.
 - **Couple and family passes** — a category can admit more than one person per
   ticket, which the gate scanner shows on scan.
 - **Codes at checkout** — discount codes and referral codes share one input box.
@@ -95,12 +109,23 @@ complete landing page, and the dashboard has a one-tap WhatsApp share.
   you type** — layers, seats in the first layer, growth per layer, empty centre,
   arc sweep and facing. Click any seat to block it. Regenerating a layout keeps
   every seat that's already sold, so a tweak can never orphan a booking.
+- **Nights** — add one night, or a whole run of consecutive nights in one go.
+  Pause a night without deleting it; per-night passes sold and gross are listed
+  beside each. A night with sales can't be deleted, only paused.
+- **Orders** — click any row to open its passes, message the buyer their pass
+  link on WhatsApp, copy the order link, or **cancel and release the seats**
+  (passes stop scanning, inventory returns, a limited-use code gets its
+  redemption back).
+- **Duplicate an event** — clones ticket types, seat layouts and codes into a
+  fresh draft. Organisers run the same show every season.
 - **Codes** — percentage, flat ₹, capped percentage, minimum tickets, minimum
   order, total redemption limit, per-phone limit, category-scoped, expiry, and
   hidden "special" passes for sponsors and guests. Referral codes carry a buyer
   discount *and* a promoter commission, each percentage or flat, with clicks,
   tickets, sales and commission tracked per promoter.
 - **Orders & attendees** — searchable, filterable, CSV export for both.
+- **Bulk seat editing** — block or unblock a whole row or ring from one chip,
+  rather than clicking seats one at a time.
 - **Check-in** — a gate scanner that reads QR codes with the phone camera
   (`BarcodeDetector`) or accepts a typed code. Duplicate scans are caught and
   labelled, and a live "inside right now" counter tracks arrivals.
@@ -122,8 +147,12 @@ src/
     booking.ts        pending order → payment → issued tickets
     payments.ts       provider seam (mock / Razorpay)
     analytics.ts      every dashboard number, in one pass
-  lib/seat-layout.ts  seat geometry — the single source both the editor and
-                      the buyer's picker draw from, so they cannot disagree
+  lib/seat-layout.ts  seat and stage geometry — the single source the editor,
+                      the buyer's picker and the seat generator all draw from
+  components/
+    date-time-field.tsx  a date input and a time input, not `datetime-local`
+    nav.tsx              back button + breadcrumbs
+    toast.tsx            action feedback
   components/
     charts.tsx        SVG charts on a CVD-validated categorical palette
     seat-map.tsx      one SVG renderer for grid, rings and arc layouts
@@ -149,6 +178,14 @@ inventory for 8 minutes inside a transaction that re-checks availability, so
 two simultaneous buyers can't claim the same seat or drain the last of a
 category. Abandoning checkout releases the hold; expired holds are reaped
 lazily on the next availability read.
+
+**Dates are not `datetime-local`.** The native combined control refuses a
+half-filled value and enforces it with a browser tooltip that can't be styled or
+reworded — so a date typed without a time reads as an error rather than an
+unfinished field. Two plain inputs validate independently, default the time to a
+sensible evening slot, offer Today / Tomorrow / This Friday and 6–9 pm presets,
+and echo the result back in words. A hidden field carries the combined value, so
+nothing server-side changed.
 
 **Payment confirmation is idempotent** — a duplicated gateway callback will not
 mint a second set of tickets.
@@ -188,8 +225,8 @@ Worth knowing before this goes in front of a paying organiser:
   screen and shareable; automatic delivery needs a WhatsApp Business API
   provider (Gupshup, Interakt, Twilio).
 - **No email/SMS sending**, no PDF ticket download.
-- **No refunds or cancellations** from the dashboard — the schema supports the
-  states, the UI doesn't drive them yet.
+- **Cancelling an order does not move money.** It voids the passes and releases
+  the seats; the actual refund is issued in the payment gateway.
 - **One login per organiser.** No staff accounts or roles; the gate PIN exists
   in the schema but the scanner currently sits behind the organiser login.
 - **Seat holds assume a single node.** Correct for one server; a multi-instance

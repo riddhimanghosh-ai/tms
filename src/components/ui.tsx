@@ -1,6 +1,23 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 
+/** Server actions return unions; this reads the error branch safely. */
+export function actionError(state: unknown): string | null {
+  if (!state || typeof state !== "object") return null;
+  const err = (state as { error?: unknown }).error;
+  return typeof err === "string" && err ? err : null;
+}
+
+export function FormError({ state }: { state: unknown }) {
+  const message = actionError(state);
+  if (!message) return null;
+  return (
+    <p className="rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200">
+      {message}
+    </p>
+  );
+}
+
 export function cn(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
 }

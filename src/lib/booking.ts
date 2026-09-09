@@ -1,7 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   discountCodes,
+  eventDates,
   orderItems,
   orders,
   seatHolds,
@@ -27,6 +28,8 @@ export type CreateOrderInput = {
   buyerEmail?: string | null;
   channel?: string;
   holderNames?: Record<string, string>;
+  /** Which night, for multi-night events. */
+  showDateId?: string | null;
 };
 
 /**
@@ -37,6 +40,20 @@ export function createPendingOrder(input: CreateOrderInput) {
   const { event, cartId, lines, seatIds = [] } = input;
 
   if (!lines.some((l) => l.qty > 0)) throw new Error("Your cart is empty.");
+
+  const nights = db
+    .select()
+    .from(eventDates)
+    .where(and(eq(eventDates.eventId, event.id), eq(eventDates.active, 1)))
+    .orderBy(eventDates.sortOrder)
+    .all();
+
+  // A multi-night event must know which night before anything is reserved.
+  let showDate = nights.find((n) => n.id === input.showDateId) ?? null;
+  if (nights.length > 1 && !showDate) throw new Error("Please choose which night you're coming.");
+  if (nights.length === 1) showDate = nights[0];
+  if (nights.length > 1 && showDate && showDate.startsAt < Math.floor(Date.now() / 1000))
+    throw new Error("That night has already passed.");
 
   const totalQty = lines.reduce((n, l) => n + l.qty, 0);
   if (totalQty > event.maxTicketsPerOrder) {
@@ -61,6 +78,7 @@ export function createPendingOrder(input: CreateOrderInput) {
   holdInventory({
     eventId: event.id,
     cartId,
+    showDateId: showDate?.id ?? null,
     seatIds,
     openQty:
       event.layoutType === "seated"
@@ -78,6 +96,8 @@ export function createPendingOrder(input: CreateOrderInput) {
         publicId,
         eventId: event.id,
         organizerId: event.organizerId,
+        showDateId: showDate?.id ?? null,
+        showDateLabel: showDate ? nightLabel(showDate) : null,
         buyerName: input.buyerName,
         buyerPhone: input.buyerPhone,
         buyerEmail: input.buyerEmail ?? null,
@@ -137,6 +157,11 @@ export function confirmOrder(args: {
       .where(eq(orderItems.orderId, order.id))
       .all();
 
+    const showDateStartsAt = order.showDateId
+      ? (tx.select().from(eventDates).where(eq(eventDates.id, order.showDateId)).get()?.startsAt ??
+        null)
+      : null;
+
     const seatQueue = [...(meta.seatIds ?? [])];
     const seatRows = seatQueue.length
       ? tx.select().from(seats).where(eq(seats.eventId, order.eventId)).all()
@@ -161,6 +186,9 @@ export function confirmOrder(args: {
             zoneName: item.zoneName,
             seatId,
             seatLabel: seatId ? (seatById.get(seatId)?.label ?? null) : null,
+            showDateId: order.showDateId,
+            showDateLabel: order.showDateLabel,
+            showDateStartsAt: showDateStartsAt,
             holderName: order.buyerName,
             admitsCount: zone?.admitsCount ?? 1,
             status: "valid",
@@ -201,4 +229,14 @@ export function failOrder(orderId: string, reason = "cancelled") {
   const meta = JSON.parse(order.notes ?? "{}") as { cartId?: string };
   if (meta.cartId) releaseCart(meta.cartId);
   db.update(orders).set({ status: reason }).where(eq(orders.id, orderId)).run();
+}
+
+/** "Night 3 — Finale", or the date itself when no label was given. */
+export function nightLabel(night: { label: string | null; startsAt: number }) {
+  if (night.label) return night.label;
+  return new Date(night.startsAt * 1000).toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
 }

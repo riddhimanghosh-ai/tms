@@ -1,8 +1,9 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { deleteZone, saveZone, toggleSeatBlock } from "@/app/admin/actions";
+import { deleteZone, saveZone, setSeatsBlocked, toggleSeatBlock } from "@/app/admin/actions";
 import {
+  FormError,
   Badge,
   Button,
   Card,
@@ -13,11 +14,21 @@ import {
   cn,
 } from "@/components/ui";
 import { SeatLegend, SeatMap, ShapePreview, type MapSeat } from "@/components/seat-map";
-import { SHAPES, ringSizes, type RingConfig, type ZoneShape } from "@/lib/seat-layout";
+import { LayerEditor } from "./layer-editor";
+import {
+  SHAPES,
+  ringRowLabel,
+  ringSizes,
+  type RingConfig,
+  type StageConfig,
+  type ZoneShape,
+} from "@/lib/seat-layout";
 import { formatMinor } from "@/lib/money";
+import { toast, useActionToast } from "@/components/toast";
 
 type ZoneRow = RingConfig & {
   id: string;
+  eventId: string;
   name: string;
   description: string | null;
   priceMinor: number;
@@ -31,6 +42,9 @@ type ZoneRow = RingConfig & {
   rows: number;
   cols: number;
   active: number;
+  allDates: number;
+  layerColors: string[];
+  layerNotes: string[];
   sortOrder: number;
   sold: number;
 };
@@ -39,14 +53,32 @@ type SeatRow = MapSeat & { zoneId: string };
 
 const swatches = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"];
 
+/**
+ * A number input that can be genuinely empty while being edited. Coercing to 0
+ * on every keystroke is what produces "02" and "013" when someone types over a
+ * value, so the raw string is what the input shows.
+ */
+function useNumberField(initial: number) {
+  const [raw, setRaw] = useState(String(initial));
+  const value = Number(raw);
+  return [
+    { raw, value: Number.isFinite(value) ? value : 0 },
+    (next: string) => setRaw(next.replace(/^0+(?=\d)/, "")),
+  ] as const;
+}
+
 export function ZoneManager({
   event,
   zones,
   seats,
+  stage,
+  nightCount,
 }: {
   event: { id: string; layoutType: string; currency: string };
   zones: ZoneRow[];
   seats: SeatRow[];
+  stage: StageConfig;
+  nightCount: number;
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const seated = event.layoutType === "seated";
@@ -75,6 +107,8 @@ export function ZoneManager({
           zone={editing === "new" ? null : zones.find((z) => z.id === editing)!}
           onDone={() => setEditing(null)}
           seated={seated}
+          stage={stage}
+          nightCount={nightCount}
           nextSort={zones.length}
         />
       ) : null}
@@ -95,6 +129,9 @@ export function ZoneManager({
                     {z.admitsCount > 1 ? <Badge tone="brand">admits {z.admitsCount}</Badge> : null}
                     {seated ? (
                       <Badge>{SHAPES.find((s) => s.value === z.shape)?.title ?? z.shape}</Badge>
+                    ) : null}
+                    {nightCount > 1 && z.allDates ? (
+                      <Badge tone="amber">all {nightCount} nights</Badge>
                     ) : null}
                   </p>
                   {z.description ? (
@@ -123,7 +160,7 @@ export function ZoneManager({
             </div>
 
             {seated ? (
-              <ZoneSeatMap zone={z} seats={seats.filter((s) => s.zoneId === z.id)} />
+              <ZoneSeatMap zone={z} seats={seats.filter((s) => s.zoneId === z.id)} stage={stage} />
             ) : (
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-800">
                 <div
@@ -142,13 +179,36 @@ export function ZoneManager({
   );
 }
 
-function ZoneSeatMap({ zone, seats }: { zone: ZoneRow; seats: SeatRow[] }) {
+function ZoneSeatMap({
+  zone,
+  seats,
+  stage,
+}: {
+  zone: ZoneRow;
+  seats: SeatRow[];
+  stage: StageConfig;
+}) {
   const [pending, start] = useTransition();
+
+  const layerCount = zone.shape === "grid" ? zone.rows : zone.ringCount;
+  const layers = Array.from({ length: layerCount }, (_, i) => {
+    const inLayer = seats.filter((s) => (zone.shape === "grid" ? s.y : s.ringIndex) === i);
+    return {
+      index: i,
+      label: zone.shape === "grid" ? `Row ${inLayer[0]?.rowLabel ?? i + 1}` : ringRowLabel(i),
+      color: zone.layerColors[i] || zone.color,
+      note: zone.layerNotes[i] || undefined,
+      count: inLayer.length,
+      seatIds: inLayer.filter((s) => s.state !== "sold").map((s) => s.id),
+      allBlocked: inLayer.length > 0 && inLayer.every((s) => s.state !== "available"),
+    };
+  }).filter((l) => l.count > 0);
 
   return (
     <div className="mt-4">
       <p className="mb-2 text-xs text-ink-400">
         Click a seat to block or unblock it — broken chair, camera position, house seats.
+        Use the layer buttons below to do a whole row or ring at once.
       </p>
       <div
         className={cn(
@@ -161,11 +221,51 @@ function ZoneSeatMap({ zone, seats }: { zone: ZoneRow; seats: SeatRow[] }) {
           seats={seats}
           mode="edit"
           theme="dark"
+          stage={stage}
           onToggle={(seatId) => start(() => void toggleSeatBlock(seatId))}
         />
       </div>
-      <div className="mt-2">
-        <SeatLegend color={zone.color} theme="dark" />
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {layers.map((l) => (
+          <button
+            key={l.index}
+            type="button"
+            disabled={pending || !l.seatIds.length}
+            onClick={() =>
+              start(async () => {
+                const res = await setSeatsBlocked(zone.eventId, l.seatIds, !l.allBlocked);
+                toast(
+                  `${l.allBlocked ? "Unblocked" : "Blocked"} ${res.changed} seat${res.changed === 1 ? "" : "s"} in ${l.label}`,
+                  "ok",
+                );
+              })
+            }
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-xs transition disabled:opacity-40",
+              l.allBlocked
+                ? "border-ink-600 bg-ink-800 text-ink-300"
+                : "border-ink-700 text-ink-400 hover:border-ink-600 hover:text-ink-100",
+            )}
+            title={`${l.allBlocked ? "Unblock" : "Block"} all of ${l.label}`}
+          >
+            <span
+              className="mr-1.5 inline-block size-2 rounded-full align-middle"
+              style={{ background: l.color }}
+            />
+            {l.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3">
+        <SeatLegend
+          color={zone.color}
+          theme="dark"
+          layers={
+            zone.layerNotes.some(Boolean) || zone.layerColors.some(Boolean) ? layers : undefined
+          }
+        />
       </div>
     </div>
   );
@@ -190,25 +290,37 @@ function ZoneForm({
   event,
   zone,
   seated,
+  stage,
+  nightCount,
   nextSort,
   onDone,
 }: {
   event: { id: string };
   zone: ZoneRow | null;
   seated: boolean;
+  stage: StageConfig;
+  nightCount: number;
   nextSort: number;
   onDone: () => void;
 }) {
   const [state, action, pending] = useActionState(saveZone, undefined);
+  useActionToast(state, { ok: "Ticket type saved" });
   const [color, setColor] = useState(zone?.color ?? swatches[nextSort % swatches.length]);
   const [shape, setShape] = useState<ZoneShape>((zone?.shape as ZoneShape) ?? "grid");
+  const [rowStart, setRowStart] = useState("A");
+  const [layers, setLayers] = useState({
+    colors: zone?.layerColors ?? [],
+    notes: zone?.layerNotes ?? [],
+  });
 
   // Live geometry so the organiser sees the layout while typing numbers.
-  const [rows, setRows] = useState(zone?.rows || 6);
-  const [cols, setCols] = useState(zone?.cols || 14);
-  const [ringCount, setRingCount] = useState(zone?.ringCount || 5);
-  const [ringStartSeats, setRingStartSeats] = useState(zone?.ringStartSeats || 12);
-  const [ringSeatStep, setRingSeatStep] = useState(zone?.ringSeatStep ?? 6);
+  // Kept as strings so a field can be empty mid-edit instead of snapping to 0
+  // and leaving a leading zero behind the next keystroke.
+  const [rows, setRows] = useNumberField(zone?.rows || 6);
+  const [cols, setCols] = useNumberField(zone?.cols || 14);
+  const [ringCount, setRingCount] = useNumberField(zone?.ringCount || 5);
+  const [ringStartSeats, setRingStartSeats] = useNumberField(zone?.ringStartSeats || 12);
+  const [ringSeatStep, setRingSeatStep] = useNumberField(zone?.ringSeatStep ?? 6);
   const [arcSpanDeg, setArcSpanDeg] = useState(zone?.arcSpanDeg ?? 360);
   const [arcStartDeg, setArcStartDeg] = useState(zone?.arcStartDeg ?? 0);
   const [innerHolePct, setInnerHolePct] = useState(zone?.innerHolePct ?? 35);
@@ -217,22 +329,23 @@ function ZoneForm({
 
   const cfg: RingConfig = {
     shape,
-    ringCount,
-    ringStartSeats,
-    ringSeatStep,
+    ringCount: ringCount.value,
+    ringStartSeats: ringStartSeats.value,
+    ringSeatStep: ringSeatStep.value,
     arcSpanDeg: shape === "rings" ? 360 : arcSpanDeg,
     arcStartDeg,
     innerHolePct,
   };
   const sizes = ringSizes(cfg);
-  const seatTotal = shape === "grid" ? rows * cols : sizes.reduce((n, s) => n + s, 0);
+  const seatTotal =
+    shape === "grid" ? rows.value * cols.value : sizes.reduce((n, s) => n + s, 0);
 
   // A preview needs seat rows; build them from the live config, not the database.
   const previewSeats: MapSeat[] =
     shape === "grid"
-      ? Array.from({ length: Math.min(rows * cols, 1200) }, (_, i) => {
-          const r = Math.floor(i / cols);
-          const c = i % cols;
+      ? Array.from({ length: Math.min(rows.value * cols.value, 1200) }, (_, i) => {
+          const r = Math.floor(i / Math.max(1, cols.value));
+          const c = i % Math.max(1, cols.value);
           return {
             id: `p${i}`,
             label: `${String.fromCharCode(65 + r)}${c + 1}`,
@@ -363,8 +476,8 @@ function ZoneForm({
                         type="number"
                         min={1}
                         max={60}
-                        value={rows}
-                        onChange={(e) => setRows(Number(e.target.value) || 0)}
+                        value={rows.raw}
+                        onChange={(e) => setRows(e.target.value)}
                       />
                     </Field>
                     <Field label="Seats per row">
@@ -373,12 +486,17 @@ function ZoneForm({
                         type="number"
                         min={1}
                         max={80}
-                        value={cols}
-                        onChange={(e) => setCols(Number(e.target.value) || 0)}
+                        value={cols.raw}
+                        onChange={(e) => setCols(e.target.value)}
                       />
                     </Field>
                     <Field label="First row letter">
-                      <Input name="rowStart" maxLength={1} defaultValue="A" />
+                      <Input
+                        name="rowStart"
+                        maxLength={1}
+                        value={rowStart}
+                        onChange={(e) => setRowStart(e.target.value.toUpperCase() || "A")}
+                      />
                     </Field>
                   </div>
                 ) : (
@@ -392,8 +510,8 @@ function ZoneForm({
                           type="number"
                           min={1}
                           max={40}
-                          value={ringCount}
-                          onChange={(e) => setRingCount(Number(e.target.value) || 0)}
+                          value={ringCount.raw}
+                          onChange={(e) => setRingCount(e.target.value)}
                         />
                       </Field>
                       <Field label="Seats in layer 1">
@@ -402,8 +520,8 @@ function ZoneForm({
                           type="number"
                           min={1}
                           max={200}
-                          value={ringStartSeats}
-                          onChange={(e) => setRingStartSeats(Number(e.target.value) || 0)}
+                          value={ringStartSeats.raw}
+                          onChange={(e) => setRingStartSeats(e.target.value)}
                         />
                       </Field>
                       <Field label="Added per layer" hint="Outer layers hold more.">
@@ -412,8 +530,8 @@ function ZoneForm({
                           type="number"
                           min={0}
                           max={60}
-                          value={ringSeatStep}
-                          onChange={(e) => setRingSeatStep(Number(e.target.value) || 0)}
+                          value={ringSeatStep.raw}
+                          onChange={(e) => setRingSeatStep(e.target.value)}
                         />
                       </Field>
                     </div>
@@ -470,6 +588,16 @@ function ZoneForm({
                   </>
                 )}
 
+                <LayerEditor
+                  count={shape === "grid" ? rows.value : ringCount.value}
+                  shape={shape}
+                  rowStart={rowStart}
+                  baseColor={color}
+                  colors={layers.colors}
+                  notes={layers.notes}
+                  onChange={setLayers}
+                />
+
                 <p className="text-sm">
                   <span className="font-medium">{seatTotal.toLocaleString("en-IN")}</span>{" "}
                   <span className="text-ink-400">seats in this block</span>
@@ -484,10 +612,18 @@ function ZoneForm({
               <div className="rounded-xl border border-ink-800 bg-ink-950/60 p-3">
                 <p className="mb-1 text-xs uppercase tracking-wide text-ink-400">Live preview</p>
                 <SeatMap
-                  zone={{ ...cfg, rows, cols, color }}
+                  zone={{
+                    ...cfg,
+                    rows: rows.value,
+                    cols: cols.value,
+                    color,
+                    layerColors: layers.colors,
+                    layerNotes: layers.notes,
+                  }}
                   seats={previewSeats}
                   mode="edit"
                   theme="dark"
+                  stage={stage}
                   maxHeight={280}
                 />
               </div>
@@ -511,6 +647,24 @@ function ZoneForm({
             </Field>
           </div>
         )}
+
+        {nightCount > 1 ? (
+          <label className="flex items-start gap-2 rounded-xl border border-ink-800 bg-ink-950/40 p-3 text-sm">
+            <input
+              type="checkbox"
+              name="allDates"
+              defaultChecked={!!zone?.allDates}
+              className="mt-0.5 size-4 accent-[--color-brand-600]"
+            />
+            <span>
+              <span className="font-medium">Season pass — covers all {nightCount} nights</span>
+              <span className="mt-0.5 block text-ink-400">
+                Sold once from a single pool rather than per night. Leave off for a normal
+                night-by-night ticket.
+              </span>
+            </span>
+          </label>
+        ) : null}
 
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Min per order">
@@ -555,11 +709,7 @@ function ZoneForm({
           Available for sale
         </label>
 
-        {state && "error" in state && state.error ? (
-          <p className="rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200">
-            {state.error}
-          </p>
-        ) : null}
+        <FormError state={state} />
 
         <div className="flex gap-2">
           <Button disabled={pending}>{pending ? "Saving…" : "Save"}</Button>

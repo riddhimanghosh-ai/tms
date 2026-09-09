@@ -32,11 +32,15 @@ export async function priceCart(
   };
 }
 
-export async function liveAvailability(eventId: string) {
-  const avail = zoneAvailability(eventId);
+/**
+ * Availability for one night. The widget calls this when the buyer switches
+ * nights, so a nine-night event doesn't need nine page loads.
+ */
+export async function liveAvailability(eventId: string, showDateId: string | null) {
+  const avail = zoneAvailability(eventId, showDateId);
   return {
     zones: Object.fromEntries([...avail].map(([k, v]) => [k, v.available])),
-    takenSeatIds: [...unavailableSeatIds(eventId)],
+    takenSeatIds: [...unavailableSeatIds(eventId, showDateId)],
   };
 }
 
@@ -49,6 +53,7 @@ export async function startCheckout(input: {
   lines: CartLine[];
   seatIds: string[];
   code: string | null;
+  showDateId: string | null;
   buyerName: string;
   buyerPhone: string;
   buyerEmail: string;
@@ -68,6 +73,7 @@ export async function startCheckout(input: {
       lines: input.lines,
       seatIds: input.seatIds,
       code: input.code,
+      showDateId: input.showDateId,
       buyerName: input.buyerName.trim(),
       buyerPhone: input.buyerPhone.trim(),
       buyerEmail: input.buyerEmail.trim() || null,

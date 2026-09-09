@@ -6,6 +6,7 @@ import { cn } from "@/components/ui";
 
 const tabs = [
   { seg: "", label: "Overview" },
+  { seg: "dates", label: "Nights" },
   { seg: "tickets", label: "Tickets & seating" },
   { seg: "codes", label: "Codes" },
   { seg: "orders", label: "Orders" },

@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { priceCart, startCheckout } from "@/app/e/actions";
-import type { CartLine } from "@/lib/pricing";
-import type { RingConfig } from "@/lib/seat-layout";
+import { liveAvailability, priceCart, startCheckout } from "@/app/e/actions";
 import { formatMinor } from "@/lib/money";
+import type { CartLine } from "@/lib/pricing";
+import type { RingConfig, StageConfig } from "@/lib/seat-layout";
+import { NightPicker, type PublicNight } from "./night-picker";
 import { SeatPicker } from "./seat-picker";
 
 export type PublicZone = RingConfig & {
@@ -18,8 +19,12 @@ export type PublicZone = RingConfig & {
   minPerOrder: number;
   maxPerOrder: number;
   color: string;
+  /** A season pass — one ticket covers every night. */
+  allDates: boolean;
   rows: number;
   cols: number;
+  layerColors: string[];
+  layerNotes: string[];
   available: number;
   soldOut: boolean;
 };
@@ -44,10 +49,13 @@ export function BookingWidget({
   event,
   zones,
   seats,
+  nights,
+  initialNightId,
   brandColor,
   initialCode,
   channel,
   supportPhone,
+  stage,
 }: {
   event: {
     id: string;
@@ -59,12 +67,18 @@ export function BookingWidget({
   };
   zones: PublicZone[];
   seats: PublicSeat[];
+  nights: PublicNight[];
+  initialNightId: string | null;
   brandColor: string;
   initialCode?: string | null;
   channel: string;
   supportPhone?: string | null;
+  stage: StageConfig;
 }) {
   const seated = event.layoutType === "seated";
+  const multiNight = nights.length > 1;
+
+  const [nightId, setNightId] = useState<string | null>(initialNightId);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [code, setCode] = useState(initialCode ?? "");
@@ -73,19 +87,51 @@ export function BookingWidget({
   const [step, setStep] = useState<"select" | "details">("select");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const router = useRouter();
+
+  /** Availability for the night in view, refreshed when the night changes. */
+  const [liveZones, setLiveZones] = useState<Record<string, number> | null>(null);
+  const [takenSeats, setTakenSeats] = useState<Set<string> | null>(null);
+  const [loadingNight, startNightLoad] = useTransition();
+
+  const effectiveZones = useMemo(
+    () =>
+      zones.map((z) => {
+        const available = liveZones ? (liveZones[z.id] ?? 0) : z.available;
+        return { ...z, available, soldOut: available <= 0 };
+      }),
+    [zones, liveZones],
+  );
+
+  const effectiveSeats = useMemo(
+    () =>
+      takenSeats ? seats.map((s) => ({ ...s, taken: takenSeats.has(s.id) })) : seats,
+    [seats, takenSeats],
+  );
 
   const seatsByZone = useMemo(() => {
     const map = new Map<string, PublicSeat[]>();
-    for (const s of seats) {
+    for (const s of effectiveSeats) {
       if (!map.has(s.zoneId)) map.set(s.zoneId, []);
       map.get(s.zoneId)!.push(s);
     }
     return map;
-  }, [seats]);
+  }, [effectiveSeats]);
 
-  // Seat picks are the source of truth for a seated event; quantities follow.
+  function chooseNight(id: string) {
+    if (id === nightId) return;
+    setNightId(id);
+    // A cart is scoped to one night; switching starts a clean one.
+    setQty({});
+    setSelectedSeats([]);
+    startNightLoad(async () => {
+      const next = await liveAvailability(event.id, id);
+      setLiveZones(next.zones);
+      setTakenSeats(new Set(next.takenSeatIds));
+    });
+  }
+
   const lines = useMemo(() => {
     if (!seated) {
       return Object.entries(qty)
@@ -94,17 +140,13 @@ export function BookingWidget({
     }
     const counts = new Map<string, number>();
     for (const seatId of selectedSeats) {
-      const seat = seats.find((s) => s.id === seatId);
+      const seat = effectiveSeats.find((s) => s.id === seatId);
       if (seat) counts.set(seat.zoneId, (counts.get(seat.zoneId) ?? 0) + 1);
     }
     return [...counts].map(([zoneId, n]) => ({ zoneId, qty: n }));
-  }, [qty, seated, seats, selectedSeats]);
+  }, [qty, seated, effectiveSeats, selectedSeats]);
 
   const ticketCount = lines.reduce((n, l) => n + l.qty, 0);
-
-  // `lines` is derived on every render, so the effect keys off its serialised
-  // form. An empty cart is derived rather than stored, which keeps the effect
-  // free of synchronous state updates.
   const cartKey = JSON.stringify(lines);
 
   useEffect(() => {
@@ -118,17 +160,15 @@ export function BookingWidget({
   }, [event.id, appliedCode, ticketCount, cartKey]);
 
   const shownQuote = ticketCount === 0 ? null : quote;
-
   const onSale = event.status === "published";
   const atLimit = ticketCount >= event.maxTicketsPerOrder;
+  const chosenNight = nights.find((n) => n.id === nightId) ?? null;
 
   if (!onSale) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
         <p className="text-lg font-semibold text-slate-900">Tickets aren&apos;t on sale yet</p>
-        <p className="mt-1 text-sm text-slate-500">
-          Check back soon — booking opens shortly.
-        </p>
+        <p className="mt-1 text-sm text-slate-500">Check back soon — booking opens shortly.</p>
       </div>
     );
   }
@@ -136,114 +176,139 @@ export function BookingWidget({
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 px-5 py-4">
-        <p className="text-sm font-semibold text-slate-900">
-          {step === "select" ? "Choose your passes" : "Your details"}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-slate-900">
+            {step === "select"
+              ? multiNight
+                ? "Choose your night and passes"
+                : "Choose your passes"
+              : "Your details"}
+          </p>
+          {step === "details" ? (
+            <button
+              onClick={() => setStep("select")}
+              className="ml-auto rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            >
+              ← Change passes
+            </button>
+          ) : null}
+        </div>
         {step === "select" ? (
           <p className="mt-0.5 text-xs text-slate-500">
             Up to {event.maxTicketsPerOrder} tickets per booking.
           </p>
-        ) : (
-          <button
-            onClick={() => setStep("select")}
-            className="mt-0.5 text-xs text-slate-500 underline hover:text-slate-900"
-          >
-            ← Back to passes
-          </button>
-        )}
+        ) : chosenNight ? (
+          <p className="mt-0.5 text-xs text-slate-500">{chosenNight.label}</p>
+        ) : null}
       </div>
 
       {step === "select" ? (
-        <div className="space-y-4 p-5">
-          {seated ? (
-            <SeatPicker
-              zones={zones}
-              seatsByZone={seatsByZone}
-              selected={selectedSeats}
-              max={event.maxTicketsPerOrder}
-              onChange={setSelectedSeats}
+        <div className="space-y-5 p-5">
+          {multiNight ? (
+            <NightPicker
+              nights={nights}
+              selectedId={nightId}
+              onSelect={chooseNight}
+              loading={loadingNight}
+              brandColor={brandColor}
             />
-          ) : (
-            <ul className="space-y-3">
-              {zones.map((z) => {
-                const n = qty[z.id] ?? 0;
-                const maxHere = Math.min(
-                  z.maxPerOrder,
-                  z.available,
-                  event.maxTicketsPerOrder - ticketCount + n,
-                );
-                return (
-                  <li
-                    key={z.id}
-                    className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 p-4"
-                  >
-                    <span
-                      className="h-10 w-1 shrink-0 rounded-full"
-                      style={{ background: z.color }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-slate-900">
-                        {z.name}
-                        {z.admitsCount > 1 ? (
-                          <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                            admits {z.admitsCount}
-                          </span>
-                        ) : null}
-                      </p>
-                      {z.description ? (
-                        <p className="mt-0.5 text-sm text-slate-500">{z.description}</p>
-                      ) : null}
-                      <p className="mt-1 text-sm">
-                        <span className="font-semibold text-slate-900">
-                          {formatMinor(z.priceMinor)}
-                        </span>
-                        {z.compareAtMinor ? (
-                          <span className="ml-2 text-slate-400 line-through">
-                            {formatMinor(z.compareAtMinor)}
-                          </span>
-                        ) : null}
-                        {!z.soldOut && z.available <= 25 ? (
-                          <span className="ml-2 text-amber-600">
-                            only {z.available} left
-                          </span>
-                        ) : null}
-                      </p>
-                    </div>
+          ) : null}
 
-                    {z.soldOut ? (
-                      <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-500">
-                        Sold out
-                      </span>
-                    ) : (
-                      <div className="flex items-center gap-1 rounded-lg border border-slate-200">
-                        <button
-                          type="button"
-                          aria-label={`Remove one ${z.name}`}
-                          disabled={n === 0}
-                          onClick={() => setQty({ ...qty, [z.id]: Math.max(0, n - 1) })}
-                          className="grid size-9 place-items-center rounded-l-lg text-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30"
-                        >
-                          −
-                        </button>
-                        <span className="w-8 text-center text-sm font-medium tabular-nums text-slate-900">
-                          {n}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label={`Add one ${z.name}`}
-                          disabled={n >= maxHere || atLimit}
-                          onClick={() => setQty({ ...qty, [z.id]: n + 1 })}
-                          className="grid size-9 place-items-center rounded-r-lg text-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30"
-                        >
-                          +
-                        </button>
+          <div className={loadingNight ? "pointer-events-none opacity-50" : undefined}>
+            {seated ? (
+              <SeatPicker
+                zones={effectiveZones}
+                seatsByZone={seatsByZone}
+                selected={selectedSeats}
+                max={event.maxTicketsPerOrder}
+                stage={stage}
+                onChange={setSelectedSeats}
+              />
+            ) : (
+              <ul className="space-y-3">
+                {effectiveZones.map((z) => {
+                  const n = qty[z.id] ?? 0;
+                  const maxHere = Math.min(
+                    z.maxPerOrder,
+                    z.available,
+                    event.maxTicketsPerOrder - ticketCount + n,
+                  );
+                  return (
+                    <li
+                      key={z.id}
+                      className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 p-4"
+                    >
+                      <span
+                        className="h-10 w-1 shrink-0 rounded-full"
+                        style={{ background: z.color }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="flex flex-wrap items-center gap-2 font-medium text-slate-900">
+                          {z.name}
+                          {z.admitsCount > 1 ? (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                              admits {z.admitsCount}
+                            </span>
+                          ) : null}
+                          {multiNight && z.allDates ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                              all {nights.length} nights
+                            </span>
+                          ) : null}
+                        </p>
+                        {z.description ? (
+                          <p className="mt-0.5 text-sm text-slate-500">{z.description}</p>
+                        ) : null}
+                        <p className="mt-1 text-sm">
+                          <span className="font-semibold text-slate-900">
+                            {formatMinor(z.priceMinor)}
+                          </span>
+                          {z.compareAtMinor ? (
+                            <span className="ml-2 text-slate-400 line-through">
+                              {formatMinor(z.compareAtMinor)}
+                            </span>
+                          ) : null}
+                          {!z.soldOut && z.available <= 25 ? (
+                            <span className="ml-2 text-amber-600">only {z.available} left</span>
+                          ) : null}
+                        </p>
                       </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+
+                      {z.soldOut ? (
+                        <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-500">
+                          Sold out
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-1 rounded-lg border border-slate-200">
+                          <button
+                            type="button"
+                            aria-label={`Remove one ${z.name}`}
+                            disabled={n === 0}
+                            onClick={() => setQty({ ...qty, [z.id]: Math.max(0, n - 1) })}
+                            className="grid size-9 place-items-center rounded-l-lg text-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+                          >
+                            −
+                          </button>
+                          <span className="w-8 text-center text-sm font-medium tabular-nums text-slate-900">
+                            {n}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Add one ${z.name}`}
+                            disabled={n >= maxHere || atLimit}
+                            onClick={() => setQty({ ...qty, [z.id]: n + 1 })}
+                            className="grid size-9 place-items-center rounded-r-lg text-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+                          >
+                            +
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
 
           <CodeBox
             code={code}
@@ -258,7 +323,7 @@ export function BookingWidget({
             }}
           />
 
-          <Summary quote={shownQuote} pending={pending} />
+          <Summary quote={shownQuote} pending={pending} nightLabel={chosenNight?.label} />
 
           <button
             type="button"
@@ -268,7 +333,9 @@ export function BookingWidget({
             style={{ background: brandColor }}
           >
             {ticketCount === 0
-              ? "Select your passes"
+              ? multiNight && !nightId
+                ? "Pick a night to start"
+                : "Select your passes"
               : `Continue · ${formatMinor(shownQuote?.totalMinor ?? 0)}`}
           </button>
         </div>
@@ -285,6 +352,7 @@ export function BookingWidget({
               lines,
               seatIds: selectedSeats,
               code: appliedCode,
+              showDateId: nightId,
               buyerName: String(form.get("name") ?? ""),
               buyerPhone: String(form.get("phone") ?? ""),
               buyerEmail: String(form.get("email") ?? ""),
@@ -337,7 +405,7 @@ export function BookingWidget({
             />
           </label>
 
-          <Summary quote={shownQuote} pending={pending} />
+          <Summary quote={shownQuote} pending={pending} nightLabel={chosenNight?.label} />
 
           {event.terms ? (
             <p className="text-xs leading-relaxed text-slate-500">{event.terms}</p>
@@ -431,12 +499,26 @@ function CodeBox({
   );
 }
 
-function Summary({ quote, pending }: { quote: Quote | null; pending: boolean }) {
+function Summary({
+  quote,
+  pending,
+  nightLabel,
+}: {
+  quote: Quote | null;
+  pending: boolean;
+  nightLabel?: string;
+}) {
   if (!quote || quote.ticketCount === 0) return null;
   return (
     <dl
       className={`space-y-1.5 rounded-xl bg-slate-50 p-4 text-sm transition-opacity ${pending ? "opacity-60" : ""}`}
     >
+      {nightLabel ? (
+        <div className="flex justify-between border-b border-slate-200 pb-2">
+          <dt className="text-slate-600">Night</dt>
+          <dd className="font-medium text-slate-900">{nightLabel}</dd>
+        </div>
+      ) : null}
       <div className="flex justify-between">
         <dt className="text-slate-600">
           {quote.ticketCount} ticket{quote.ticketCount > 1 ? "s" : ""}

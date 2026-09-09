@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getOrganizer } from "@/lib/auth";
 import { logout } from "./auth-actions";
+import { Toaster } from "@/components/toast";
 import { EventNav } from "./nav";
 
 export default async function AdminLayout({
@@ -11,7 +12,13 @@ export default async function AdminLayout({
   const organizer = await getOrganizer();
 
   // Signed-out routes (login, signup) render without the dashboard chrome.
-  if (!organizer) return <>{children}</>;
+  if (!organizer)
+    return (
+      <>
+        {children}
+        <Toaster />
+      </>
+    );
 
   return (
     <div className="min-h-dvh">
@@ -43,6 +50,7 @@ export default async function AdminLayout({
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <Toaster />
     </div>
   );
 }

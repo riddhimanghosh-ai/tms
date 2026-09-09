@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { abandonPayment, completePayment } from "@/app/e/actions";
+import { BackButton } from "@/components/nav";
 import { formatMinor } from "@/lib/money";
 
 type Props = {
@@ -21,10 +22,11 @@ type Props = {
   eventTitle: string;
   brandColor: string;
   razorpayKey: string;
+  backHref: string;
 };
 
 export function PaymentPanel(props: Props) {
-  const { publicId, provider, order, items, eventTitle, brandColor } = props;
+  const { publicId, provider, order, items, eventTitle, brandColor, backHref } = props;
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +53,14 @@ export function PaymentPanel(props: Props) {
   return (
     <div className="surface-light grid min-h-dvh place-items-center px-4 py-10">
       <div className="w-full max-w-md">
+        <div className="mb-3">
+          <BackButton
+            href={backHref}
+            label="Back to passes"
+            tone="light"
+            onBack={() => void abandonPayment(publicId)}
+          />
+        </div>
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-5 py-4">
             <p className="text-sm text-slate-500">Paying for</p>

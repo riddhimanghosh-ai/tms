@@ -6,6 +6,7 @@ import { events, orders, organizers, tickets } from "@/db/schema";
 import { formatMinor } from "@/lib/money";
 import { qrSvg } from "@/lib/qr";
 import { TicketCard } from "@/components/booking/ticket-card";
+import { BackButton } from "@/components/nav";
 
 export default async function OrderPage({
   params,
@@ -38,6 +39,17 @@ export default async function OrderPage({
   return (
     <div className="surface-light min-h-dvh px-4 py-10">
       <div className="mx-auto max-w-2xl space-y-6">
+        <div className="flex items-center justify-between gap-3">
+          <BackButton href={`/e/${organizer.slug}/${event.slug}`} label="Event page" tone="light" />
+          <Link
+            href={`/e/${organizer.slug}/${event.slug}/book`}
+            className="text-sm font-medium underline"
+            style={{ color: organizer.brandColor }}
+          >
+            Book more passes
+          </Link>
+        </div>
+
         {order.status === "paid" ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
             <p className="text-2xl">🎉</p>

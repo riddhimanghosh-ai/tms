@@ -2,10 +2,15 @@
 
 import { useMemo, useState } from "react";
 import {
+  CENTRE,
   VIEW,
   gridSeatPoint,
+  layerColor,
+  resolveStage,
   ringSeatPoint,
+  stageGeometry,
   type RingConfig,
+  type StageConfig,
   type ZoneShape,
 } from "@/lib/seat-layout";
 
@@ -28,6 +33,10 @@ export type MapZone = RingConfig & {
   rows: number;
   cols: number;
   color: string;
+  /** One hex per layer; blanks fall back to `color`. */
+  layerColors?: string[];
+  /** One short note per layer, shown in the legend and on hover. */
+  layerNotes?: string[];
 };
 
 const PALETTE = {
@@ -36,8 +45,9 @@ const PALETTE = {
     blocked: "#2c2839",
     selected: "#ffffff",
     guide: "#2c2839",
-    centreFill: "#191722",
-    centreText: "#7c7594",
+    stageFill: "#201d2b",
+    stageStroke: "#3d3852",
+    stageText: "#a49dbb",
     rowText: "#7c7594",
   },
   light: {
@@ -45,15 +55,18 @@ const PALETTE = {
     blocked: "#b9b4c6",
     selected: "#0f172a",
     guide: "#e6e3ee",
-    centreFill: "#f1eff6",
-    centreText: "#8b8699",
+    stageFill: "#eceaf3",
+    stageStroke: "#d6d2e2",
+    stageText: "#6b6679",
     rowText: "#9a95a8",
   },
 } as const;
 
+const DEFAULT_STAGE: StageConfig = { label: "STAGE", position: "auto", shape: "auto" };
+
 /**
- * One renderer for every seat layout, used by both the organiser's editor and
- * the buyer's picker. Positions come from `seat-layout`, so what an organiser
+ * One renderer for every seat layout, used by the organiser's editor and the
+ * buyer's picker alike. Positions come from `seat-layout`, so what an organiser
  * arranges is pixel-for-pixel what a buyer taps.
  */
 export function SeatMap({
@@ -63,7 +76,7 @@ export function SeatMap({
   onToggle,
   mode,
   theme = "dark",
-  centreLabel,
+  stage = DEFAULT_STAGE,
   maxHeight = 460,
 }: {
   zone: MapZone;
@@ -73,13 +86,15 @@ export function SeatMap({
   /** edit: click blocks/unblocks. select: click picks a seat to buy. */
   mode: "edit" | "select";
   theme?: "dark" | "light";
-  centreLabel?: string;
+  stage?: StageConfig;
   maxHeight?: number;
 }) {
   const c = PALETTE[theme];
   const [hover, setHover] = useState<MapSeat | null>(null);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const isRing = zone.shape !== "grid";
+  const colors = zone.layerColors ?? [];
+  const notes = zone.layerNotes ?? [];
 
   const placed = useMemo(
     () =>
@@ -87,12 +102,11 @@ export function SeatMap({
         const point = isRing
           ? ringSeatPoint(zone, seat.ringIndex, seat.posInRing, seat.ringSize || 1)
           : gridSeatPoint(zone.rows, zone.cols, seat.y, seat.x - 1);
-        return { seat, point };
+        return { seat, point, layer: isRing ? seat.ringIndex : seat.y };
       }),
     [seats, zone, isRing],
   );
 
-  // Ring guides sit under the seats and make the layers legible when crowded.
   const guides = useMemo(() => {
     if (!isRing) return [];
     const byRing = new Map<number, number>();
@@ -101,11 +115,13 @@ export function SeatMap({
       .sort(([a], [b]) => a - b)
       .map(([ringIndex, size]) => {
         const p = ringSeatPoint(zone, ringIndex, 0, size);
-        const dx = p.x - VIEW / 2;
-        const dy = p.y - VIEW / 2;
-        return { ringIndex, radius: Math.hypot(dx, dy) };
+        return { ringIndex, radius: Math.hypot(p.x - CENTRE, p.y - CENTRE) };
       });
   }, [placed, zone, isRing]);
+
+  const innerRadius = guides[0]?.radius ?? 150;
+  const resolvedStage = resolveStage(stage, zone.shape as ZoneShape);
+  const stageGeo = stageGeometry(resolvedStage, innerRadius);
 
   const rowLabels = useMemo(() => {
     if (isRing) return [];
@@ -125,6 +141,7 @@ export function SeatMap({
   }
 
   const interactive = Boolean(onToggle);
+  const hoverNote = hover ? notes[isRing ? hover.ringIndex : hover.y] : null;
 
   return (
     <div className="relative">
@@ -136,74 +153,81 @@ export function SeatMap({
         aria-label={`Seat map, ${seats.length} seats`}
         onMouseLeave={() => setHover(null)}
       >
-        {isRing ? (
-          <>
-            {guides.map((g) => (
+        {isRing
+          ? guides.map((g) => (
               <circle
                 key={g.ringIndex}
-                cx={VIEW / 2}
-                cy={VIEW / 2}
+                cx={CENTRE}
+                cy={CENTRE}
                 r={g.radius}
                 fill="none"
                 stroke={c.guide}
                 strokeWidth={1}
               />
-            ))}
-            <circle
-              cx={VIEW / 2}
-              cy={VIEW / 2}
-              r={Math.max(28, (guides[0]?.radius ?? 120) * 0.62)}
-              fill={c.centreFill}
-              stroke={c.guide}
-            />
-            <text
-              x={VIEW / 2}
-              y={VIEW / 2 + 6}
-              textAnchor="middle"
-              fontSize={30}
-              fill={c.centreText}
-              style={{ letterSpacing: 3 }}
-            >
-              {centreLabel ?? (zone.shape === "arc" ? "STAGE" : "CENTRE")}
-            </text>
-          </>
-        ) : (
-          <>
-            <rect x={140} y={4} width={VIEW - 280} height={30} rx={15} fill={c.centreFill} />
-            <text
-              x={VIEW / 2}
-              y={25}
-              textAnchor="middle"
-              fontSize={20}
-              fill={c.centreText}
-              style={{ letterSpacing: 4 }}
-            >
-              {centreLabel ?? "STAGE"}
-            </text>
-            {rowLabels.map((r) => (
-              <text
-                key={r.label}
-                x={16}
-                y={r.y + 6}
-                fontSize={18}
-                fill={c.rowText}
-              >
+            ))
+          : rowLabels.map((r) => (
+              <text key={r.label} x={16} y={r.y + 6} fontSize={18} fill={c.rowText}>
                 {r.label}
               </text>
             ))}
-          </>
-        )}
 
-        {placed.map(({ seat, point }) => {
+        {stageGeo ? (
+          <g>
+            {stageGeo.kind === "circle" ? (
+              <circle
+                cx={stageGeo.cx}
+                cy={stageGeo.cy}
+                r={stageGeo.r}
+                fill={c.stageFill}
+                stroke={c.stageStroke}
+              />
+            ) : stageGeo.kind === "curve" ? (
+              <path
+                d={stageGeo.path}
+                fill={c.stageFill}
+                stroke={c.stageStroke}
+                strokeWidth={2}
+              />
+            ) : (
+              <rect
+                x={stageGeo.x}
+                y={stageGeo.y}
+                width={stageGeo.width}
+                height={stageGeo.height}
+                rx={stageGeo.height / 2}
+                fill={c.stageFill}
+                stroke={c.stageStroke}
+              />
+            )}
+            <text
+              x={stageGeo.labelX}
+              y={stageGeo.labelY}
+              textAnchor="middle"
+              fontSize={stageGeo.kind === "circle" ? 28 : 20}
+              fill={c.stageText}
+              style={{ letterSpacing: 4 }}
+              transform={
+                stageGeo.rotate
+                  ? `rotate(${stageGeo.rotate} ${stageGeo.labelX} ${stageGeo.labelY})`
+                  : undefined
+              }
+            >
+              {resolvedStage.label}
+            </text>
+          </g>
+        ) : null}
+
+        {placed.map(({ seat, point, layer }) => {
           const picked = selectedSet.has(seat.id);
           const locked = mode === "select" ? seat.state !== "available" : seat.state === "sold";
+          const own = layerColor(colors, zone.color, layer);
           const fill = picked
             ? c.selected
             : seat.state === "sold"
               ? c.sold
               : seat.state === "blocked"
                 ? c.blocked
-                : zone.color;
+                : own;
 
           return (
             <g key={seat.id}>
@@ -212,7 +236,7 @@ export function SeatMap({
                 cy={point.y}
                 r={point.r}
                 fill={fill}
-                stroke={picked ? zone.color : "none"}
+                stroke={picked ? own : "none"}
                 strokeWidth={picked ? 3 : 0}
                 opacity={locked && !picked ? 0.55 : 1}
               />
@@ -238,41 +262,82 @@ export function SeatMap({
 
       {hover ? (
         <div
-          className={`pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded-lg px-2.5 py-1 text-xs ${
+          className={`pointer-events-none absolute left-1/2 top-2 max-w-[85%] -translate-x-1/2 rounded-lg px-2.5 py-1.5 text-xs ${
             theme === "dark"
               ? "border border-ink-700 bg-ink-850 text-ink-100"
               : "border border-slate-200 bg-white text-slate-800 shadow-sm"
           }`}
         >
           <span className="font-medium">{hover.label}</span>
-          <span className="opacity-70"> · {selectedSet.has(hover.id) ? "selected" : hover.state}</span>
+          <span className="opacity-70">
+            {" "}
+            · {selectedSet.has(hover.id) ? "selected" : hover.state}
+          </span>
+          {hoverNote ? <span className="block opacity-70">{hoverNote}</span> : null}
         </div>
       ) : null}
     </div>
   );
 }
 
+/**
+ * Legend. With per-layer colours it lists each layer and its note, because a
+ * single "Available" swatch would no longer describe the map.
+ */
 export function SeatLegend({
   color,
   theme = "dark",
   showSelected,
+  layers,
 }: {
   color: string;
   theme?: "dark" | "light";
   showSelected?: boolean;
+  layers?: { label: string; color: string; note?: string; count?: number }[];
 }) {
   const c = PALETTE[theme];
-  const items = [
-    { color, label: "Available" },
+  const muted = theme === "dark" ? "text-ink-400" : "text-slate-500";
+  const strong = theme === "dark" ? "text-ink-200" : "text-slate-700";
+
+  const states = [
     ...(showSelected ? [{ color: c.selected, label: "Your pick" }] : []),
     { color: c.sold, label: showSelected ? "Taken" : "Sold" },
     { color: c.blocked, label: "Blocked" },
   ];
+
+  if (layers?.length) {
+    return (
+      <div className="space-y-2">
+        <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+          {layers.map((l) => (
+            <li key={l.label} className="flex items-start gap-2 text-xs">
+              <span
+                className="mt-1 size-2.5 shrink-0 rounded-full"
+                style={{ background: l.color }}
+              />
+              <span className="min-w-0">
+                <span className={strong}>{l.label}</span>
+                {l.count != null ? <span className={muted}> · {l.count} seats</span> : null}
+                {l.note ? <span className={`block ${muted}`}>{l.note}</span> : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <ul className={`flex flex-wrap gap-4 border-t pt-2 text-xs ${muted} ${theme === "dark" ? "border-ink-800" : "border-slate-100"}`}>
+          {states.map((s) => (
+            <li key={s.label} className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full" style={{ background: s.color }} />
+              {s.label}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   return (
-    <ul
-      className={`flex flex-wrap gap-4 text-xs ${theme === "dark" ? "text-ink-400" : "text-slate-500"}`}
-    >
-      {items.map((i) => (
+    <ul className={`flex flex-wrap gap-4 text-xs ${muted}`}>
+      {[{ color, label: "Available" }, ...states].map((i) => (
         <li key={i.label} className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full" style={{ background: i.color }} />
           {i.label}
@@ -300,7 +365,7 @@ export function ShapePreview({
       const cols = Math.min(config.cols, 18);
       const out: { x: number; y: number; r: number }[] = [];
       for (let r = 0; r < rows; r++)
-        for (let c = 0; c < cols; c++) out.push(gridSeatPoint(rows, cols, r, c));
+        for (let cIdx = 0; cIdx < cols; cIdx++) out.push(gridSeatPoint(rows, cols, r, cIdx));
       return out;
     }
     const out: { x: number; y: number; r: number }[] = [];

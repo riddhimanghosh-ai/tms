@@ -2,6 +2,7 @@
 
 import { SeatLegend, SeatMap, type MapSeat } from "@/components/seat-map";
 import { formatMinor } from "@/lib/money";
+import { ringRowLabel, type StageConfig } from "@/lib/seat-layout";
 import type { PublicSeat, PublicZone } from "./booking-widget";
 
 export function SeatPicker({
@@ -9,12 +10,14 @@ export function SeatPicker({
   seatsByZone,
   selected,
   max,
+  stage,
   onChange,
 }: {
   zones: PublicZone[];
   seatsByZone: Map<string, PublicSeat[]>;
   selected: string[];
   max: number;
+  stage: StageConfig;
   onChange: (next: string[]) => void;
 }) {
   const toggle = (seatId: string) => {
@@ -46,6 +49,19 @@ export function SeatPicker({
           state: s.taken ? "sold" : "available",
         }));
 
+        // Only layers the organiser actually described earn a legend row.
+        const layerCount =
+          zone.shape === "grid" ? zone.rows : zone.ringCount;
+        const described = zone.layerNotes.some(Boolean) || zone.layerColors.some(Boolean);
+        const layers = described
+          ? Array.from({ length: layerCount }, (_, i) => ({
+              label: zone.shape === "grid" ? `Row ${String.fromCharCode(65 + i)}` : ringRowLabel(i),
+              color: zone.layerColors[i] || zone.color,
+              note: zone.layerNotes[i] || undefined,
+              count: seats.filter((s) => (zone.shape === "grid" ? s.y : s.ringIndex) === i).length,
+            })).filter((l) => l.count > 0)
+          : undefined;
+
         return (
           <div key={zone.id}>
             <div className="mb-2 flex items-baseline justify-between gap-3">
@@ -67,23 +83,30 @@ export function SeatPicker({
                 onToggle={toggle}
                 mode="select"
                 theme="light"
+                stage={stage}
                 maxHeight={380}
               />
             </div>
+
+            {layers ? (
+              <div className="mt-2">
+                <SeatLegend color={zone.color} theme="light" showSelected layers={layers} />
+              </div>
+            ) : null}
           </div>
         );
       })}
 
-      <SeatLegend color={zones[0]?.color ?? "#3987e5"} theme="light" showSelected />
+      {zones.every((z) => !z.layerNotes.some(Boolean) && !z.layerColors.some(Boolean)) ? (
+        <SeatLegend color={zones[0]?.color ?? "#3987e5"} theme="light" showSelected />
+      ) : null}
 
       {pickedLabels.length > 0 ? (
         <p className="text-sm text-slate-700">
           <span className="font-medium">Selected:</span> {pickedLabels.join(", ")}
         </p>
       ) : (
-        <p className="text-sm text-slate-500">
-          Tap the seats you want — up to {max}.
-        </p>
+        <p className="text-sm text-slate-500">Tap the seats you want — up to {max}.</p>
       )}
     </div>
   );

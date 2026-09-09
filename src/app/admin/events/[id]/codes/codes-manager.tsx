@@ -7,6 +7,7 @@ import {
   saveReferralCode,
 } from "@/app/admin/actions";
 import {
+  FormError,
   Badge,
   Button,
   Card,
@@ -410,11 +411,7 @@ function DiscountForm({
           </label>
         </div>
 
-        {state && "error" in state && state.error ? (
-          <p className="rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200">
-            {state.error}
-          </p>
-        ) : null}
+        <FormError state={state} />
 
         <div className="flex gap-2">
           <Button disabled={pending}>{pending ? "Saving…" : "Save code"}</Button>
@@ -535,11 +532,7 @@ function ReferralForm({
           Active
         </label>
 
-        {state && "error" in state && state.error ? (
-          <p className="rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200">
-            {state.error}
-          </p>
-        ) : null}
+        <FormError state={state} />
 
         <div className="flex gap-2">
           <Button disabled={pending}>{pending ? "Saving…" : "Save code"}</Button>

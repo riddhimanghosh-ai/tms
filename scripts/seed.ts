@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { db, sqlite } from "../src/db";
 import {
   discountCodes,
+  eventDates,
   events,
   orderItems,
   orders,
@@ -23,7 +24,7 @@ import { id, orderPublicId, ticketCode } from "../src/lib/ids";
 const DAY = 86400;
 const now = Math.floor(Date.now() / 1000);
 
-for (const t of [pageViews, tickets, orderItems, orders, referralCodes, discountCodes, seats, zones, events, organizers]) {
+for (const t of [pageViews, tickets, orderItems, orders, referralCodes, discountCodes, seats, zones, eventDates, events, organizers]) {
   db.delete(t).run();
 }
 
@@ -64,9 +65,29 @@ db.insert(events)
     bookingFeeFlatMinor: 1000,
     maxTicketsPerOrder: 10,
     gatePin: "4321",
+    stageLabel: "DHOL",
+    stagePosition: "centre",
+    stageShape: "circle",
     terms: "Entry only with a valid QR pass. No refunds. Right of admission reserved.",
   })
   .run();
+
+// Navratri is nine nights, each with its own inventory.
+const garbaNightIds: string[] = [];
+for (let n = 0; n < 9; n++) {
+  const nid = id();
+  garbaNightIds.push(nid);
+  db.insert(eventDates)
+    .values({
+      id: nid,
+      eventId: garbaId,
+      startsAt: now + (21 + n) * DAY,
+      label: n === 8 ? "Night 9 — Finale" : `Night ${n + 1}`,
+      note: n === 0 ? "Opening night — live orchestra from 8 pm" : null,
+      sortOrder: n,
+    })
+    .run();
+}
 
 const garbaZones = [
   { name: "Season Pass — 9 Nights", price: 599900, cap: 500, admits: 1, color: "#a21caf", desc: "All nine nights, priority lane entry." },
@@ -90,6 +111,7 @@ garbaZones.forEach((z, i) => {
       compareAtMinor: i === 0 ? 799900 : null,
       capacity: z.cap,
       admitsCount: z.admits,
+      allDates: i === 0 ? 1 : 0,
       color: z.color,
       maxPerOrder: 10,
       sortOrder: i,
@@ -115,7 +137,15 @@ db.insert(events)
     bookingFeeBps: 300,
     maxTicketsPerOrder: 6,
     gatePin: "1122",
+    stageLabel: "STAGE",
+    stagePosition: "top",
+    stageShape: "curve",
   })
+  .run();
+
+const concertNightId = id();
+db.insert(eventDates)
+  .values({ id: concertNightId, eventId: concertId, startsAt: now + 34 * DAY, sortOrder: 0 })
   .run();
 
 const seatedZones = [
@@ -184,14 +214,66 @@ db.insert(events)
     bookingFeeBps: 200,
     maxTicketsPerOrder: 8,
     gatePin: "7788",
+    stageLabel: "DHOL",
+    stagePosition: "centre",
+    stageShape: "circle",
     terms: "Traditional dress required. Entry only with a valid QR pass.",
   })
   .run();
 
+const akhadaNightIds: string[] = [];
+for (let n = 0; n < 3; n++) {
+  const nid = id();
+  akhadaNightIds.push(nid);
+  db.insert(eventDates)
+    .values({
+      id: nid,
+      eventId: akhadaId,
+      startsAt: now + (27 + n) * DAY,
+      label: `Night ${n + 1}`,
+      sortOrder: n,
+    })
+    .run();
+}
+
 const ringZones = [
-  { name: "Inner Circle", price: 449900, ringCount: 3, start: 14, step: 8, hole: 22, color: "#d55181" },
-  { name: "Middle Rings", price: 249900, ringCount: 4, start: 44, step: 10, hole: 46, color: "#c98500" },
-  { name: "Outer Rings", price: 129900, ringCount: 4, start: 90, step: 14, hole: 70, color: "#199e70" },
+  {
+    name: "Inner Circle",
+    price: 449900,
+    ringCount: 3,
+    start: 14,
+    step: 8,
+    hole: 22,
+    color: "#d55181",
+    layerColors: ["#e66767", "#d55181", "#9085e9"],
+    layerNotes: [
+      "Right at the dhol — loudest, fastest ring",
+      "Second ring, still shoulder to shoulder with the drums",
+      "Last of the inner ring, easier to step out of",
+    ],
+  },
+  {
+    name: "Middle Rings",
+    price: 249900,
+    ringCount: 4,
+    start: 44,
+    step: 10,
+    hole: 46,
+    color: "#c98500",
+    layerColors: ["#c98500", "#d95926", "", ""],
+    layerNotes: ["Best balance of sound and space", "Room to turn properly", "", ""],
+  },
+  {
+    name: "Outer Rings",
+    price: 129900,
+    ringCount: 4,
+    start: 90,
+    step: 14,
+    hole: 70,
+    color: "#199e70",
+    layerColors: [],
+    layerNotes: ["Widest circle — easiest for beginners"],
+  },
 ];
 const akhadaZoneIds: string[] = [];
 ringZones.forEach((z, zi) => {
@@ -218,6 +300,8 @@ ringZones.forEach((z, zi) => {
       capacity: sizes.reduce((n, x) => n + x, 0),
       color: z.color,
       maxPerOrder: 8,
+      layerColors: z.layerColors.some(Boolean) ? JSON.stringify(z.layerColors) : null,
+      layerNotes: z.layerNotes.some(Boolean) ? JSON.stringify(z.layerNotes) : null,
       ringCount: cfg.ringCount,
       ringStartSeats: cfg.ringStartSeats,
       ringSeatStep: cfg.ringSeatStep,
@@ -313,15 +397,23 @@ const rand = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 const zoneRows = db.select().from(zones).all();
 const zoneById = new Map(zoneRows.map((z) => [z.id, z]));
 const seatRows = db.select().from(seats).all();
+// Keyed by zone + night, since the same seat is sellable on every night.
 const freeSeats = new Map<string, typeof seatRows>();
-for (const s of seatRows) {
-  if (!freeSeats.has(s.zoneId)) freeSeats.set(s.zoneId, []);
-  freeSeats.get(s.zoneId)!.push(s);
-}
 
-function makeOrder(eventId: string, zoneIds: string[], daysAgo: number, seated: boolean) {
+function makeOrder(
+  eventId: string,
+  zoneIds: string[],
+  daysAgo: number,
+  seated: boolean,
+  nightIds: string[] = [],
+) {
   const zoneId = rand(zoneIds);
   const zone = zoneById.get(zoneId)!;
+  // A season pass covers every night, so it isn't tied to one.
+  const nightId = zone.allDates ? null : nightIds.length ? rand(nightIds) : null;
+  const night = nightId
+    ? db.select().from(eventDates).where(eq(eventDates.id, nightId)).get()
+    : null;
   const qty = seated ? 1 + Math.floor(Math.random() * 3) : 1 + Math.floor(Math.random() * 4);
   const buyer = `${rand(firstNames)} ${rand(lastNames)}`;
   const phone = `+9198${Math.floor(10000000 + Math.random() * 89999999)}`;
@@ -359,6 +451,8 @@ function makeOrder(eventId: string, zoneIds: string[], daysAgo: number, seated: 
       feeMinor: fee,
       totalMinor: total,
       commissionMinor: commission,
+      showDateId: nightId,
+      showDateLabel: night?.label ?? null,
       discountCodeId,
       referralCodeId,
       ticketCount: qty,
@@ -379,8 +473,11 @@ function makeOrder(eventId: string, zoneIds: string[], daysAgo: number, seated: 
     let seatId: string | null = null;
     let seatLabel: string | null = null;
     if (seated) {
-      const pool = freeSeats.get(zoneId) ?? [];
-      const seat = pool.pop();
+      const key = `${zoneId}:${nightId ?? "single"}`;
+      if (!freeSeats.has(key)) {
+        freeSeats.set(key, seatRows.filter((s) => s.zoneId === zoneId).slice());
+      }
+      const seat = freeSeats.get(key)!.pop();
       if (!seat) break;
       seatId = seat.id;
       seatLabel = seat.label;
@@ -395,6 +492,9 @@ function makeOrder(eventId: string, zoneIds: string[], daysAgo: number, seated: 
         zoneName: zone.name,
         seatId,
         seatLabel,
+        showDateId: nightId,
+        showDateLabel: night?.label ?? null,
+        showDateStartsAt: night?.startsAt ?? null,
         holderName: buyer,
         admitsCount: zone.admitsCount,
         status: "valid",
@@ -407,11 +507,12 @@ function makeOrder(eventId: string, zoneIds: string[], daysAgo: number, seated: 
 // Sales ramp up as the event approaches — the shape organisers actually see.
 for (let daysAgo = 21; daysAgo >= 0; daysAgo--) {
   const heat = Math.round(2 + (21 - daysAgo) * 0.9 + Math.random() * 4);
-  for (let i = 0; i < heat; i++) makeOrder(garbaId, garbaZoneIds, daysAgo, false);
+  for (let i = 0; i < heat; i++)
+    makeOrder(garbaId, garbaZoneIds, daysAgo, false, garbaNightIds);
   for (let i = 0; i < Math.round(heat / 3); i++)
-    makeOrder(concertId, concertZoneIds, daysAgo, true);
+    makeOrder(concertId, concertZoneIds, daysAgo, true, [concertNightId]);
   for (let i = 0; i < Math.round(heat / 4); i++)
-    makeOrder(akhadaId, akhadaZoneIds, daysAgo, true);
+    makeOrder(akhadaId, akhadaZoneIds, daysAgo, true, akhadaNightIds);
 
   for (let v = 0; v < heat * 7; v++) {
     db.insert(pageViews)

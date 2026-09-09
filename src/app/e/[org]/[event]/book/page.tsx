@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadPublicEvent } from "@/lib/public-event";
 import { formatMinor } from "@/lib/money";
 import { BookingWidget } from "@/components/booking/booking-widget";
+import { BackButton } from "@/components/nav";
 import { Countdown } from "@/components/booking/countdown";
 import { UrgencyStrip, urgencySignals } from "@/components/booking/urgency";
 
@@ -24,7 +24,7 @@ export default async function BookPage({ params, searchParams }: Props) {
   const data = await loadPublicEvent(org, eventSlug);
   if (!data) notFound();
 
-  const { event, organizer, zones, seats, ticketsSold } = data;
+  const { event, organizer, zones, seats, nights, selectedNightId, ticketsSold } = data;
   const start = new Date(event.startsAt * 1000);
   const signals = urgencySignals({
     zones,
@@ -37,12 +37,11 @@ export default async function BookPage({ params, searchParams }: Props) {
     <div className="surface-light min-h-dvh">
       <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-5 py-3">
-          <Link
+          <BackButton
             href={`/e/${org}/${eventSlug}`}
-            className="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-          >
-            ← Event details
-          </Link>
+            label="Event details"
+            tone="light"
+          />
           <p className="ml-auto truncate text-sm font-medium text-slate-900">{event.title}</p>
         </div>
       </nav>
@@ -70,7 +69,11 @@ export default async function BookPage({ params, searchParams }: Props) {
             ) : null}
 
             <div className="mt-5 border-t border-slate-100 pt-4">
-              <Countdown targetSec={event.startsAt} tone="light" label="Doors open in" />
+              <Countdown
+                targetSec={nights.find((n) => !n.past)?.startsAt ?? event.startsAt}
+                tone="light"
+                label={nights.length > 1 ? "Next night in" : "Doors open in"}
+              />
             </div>
           </div>
 
@@ -82,17 +85,20 @@ export default async function BookPage({ params, searchParams }: Props) {
 
           <ol className="space-y-2 rounded-2xl border border-slate-200 bg-white p-5 text-sm">
             {[
+              nights.length > 1 ? "Choose your night" : null,
               event.layoutType === "seated" ? "Pick your seats" : "Pick your passes",
               "Enter your name and mobile",
               "Pay — passes arrive instantly",
-            ].map((step, i) => (
+            ]
+              .filter(Boolean)
+              .map((step, i) => (
               <li key={step} className="flex gap-3 text-slate-600">
                 <span className="grid size-5 shrink-0 place-items-center rounded-full bg-slate-900 text-[11px] font-medium text-white">
                   {i + 1}
                 </span>
                 {step}
               </li>
-            ))}
+              ))}
           </ol>
 
           {organizer.supportPhone ? (
@@ -122,6 +128,13 @@ export default async function BookPage({ params, searchParams }: Props) {
             }}
             zones={zones}
             seats={seats}
+            nights={nights}
+            initialNightId={selectedNightId}
+            stage={{
+              label: event.stageLabel,
+              position: event.stagePosition as "auto",
+              shape: event.stageShape as "auto",
+            }}
             brandColor={organizer.brandColor}
             initialCode={ref ?? code ?? null}
             channel="web"

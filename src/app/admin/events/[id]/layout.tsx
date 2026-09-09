@@ -5,7 +5,9 @@ import { db } from "@/db";
 import { events } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { Badge } from "@/components/ui";
+import { PageNav } from "@/components/nav";
 import { StatusControl } from "./status-control";
+import { DuplicateButton } from "./duplicate-button";
 
 const statusTone = {
   published: "green",
@@ -32,33 +34,34 @@ export default async function EventLayout({
   if (!event) notFound();
 
   const publicPath = `/e/${organizer.slug}/${event.slug}`;
+  const start = new Date(event.startsAt * 1000);
 
   return (
     <div className="space-y-6">
+      <PageNav
+        backHref="/admin"
+        backLabel="All events"
+        crumbs={[
+          { label: "Events", href: "/admin" },
+          { label: event.title },
+        ]}
+      />
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <Link href="/admin" className="text-sm text-ink-400 hover:text-ink-100">
-              Events
-            </Link>
-            <span className="text-ink-600">/</span>
-          </div>
-          <h1 className="mt-1 flex items-center gap-3 text-xl font-semibold tracking-tight">
+          <h1 className="flex flex-wrap items-center gap-3 text-xl font-semibold tracking-tight">
             {event.title}
             <Badge tone={statusTone[event.status as keyof typeof statusTone] ?? "neutral"}>
               {event.status}
             </Badge>
           </h1>
           <p className="mt-1 text-sm text-ink-400">
-            {new Date(event.startsAt * 1000).toLocaleString("en-IN", {
-              dateStyle: "full",
-              timeStyle: "short",
-            })}
+            {start.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" })}
             {event.venue ? ` · ${event.venue}` : ""}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             href={publicPath}
             target="_blank"
@@ -66,6 +69,7 @@ export default async function EventLayout({
           >
             View booking page ↗
           </Link>
+          <DuplicateButton eventId={event.id} title={event.title} />
           <StatusControl eventId={event.id} status={event.status} />
         </div>
       </div>

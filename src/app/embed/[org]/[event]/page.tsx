@@ -20,7 +20,7 @@ export default async function EmbedPage({
   const data = await loadPublicEvent(org, eventSlug);
   if (!data) notFound();
 
-  const { event, organizer, zones, seats } = data;
+  const { event, organizer, zones, seats, nights, selectedNightId } = data;
   const start = new Date(event.startsAt * 1000);
 
   return (
@@ -50,6 +50,13 @@ export default async function EmbedPage({
           }}
           zones={zones}
           seats={seats}
+          nights={nights}
+          initialNightId={selectedNightId}
+          stage={{
+            label: event.stageLabel,
+            position: event.stagePosition as "auto",
+            shape: event.stageShape as "auto",
+          }}
           brandColor={organizer.brandColor}
           initialCode={ref ?? code ?? null}
           channel="embed"

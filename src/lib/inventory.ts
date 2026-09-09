@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { seatHolds, seats, tickets, zones } from "@/db/schema";
 
@@ -6,7 +6,7 @@ export const HOLD_SECONDS = 8 * 60;
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
-/** Holds are lazily reaped — no cron needed for a single-node deployment. */
+/** Holds are reaped lazily — no cron needed for a single-node deployment. */
 export function reapExpiredHolds() {
   db.delete(seatHolds).where(sql`${seatHolds.expiresAt} < ${nowSec()}`).run();
 }
@@ -20,17 +20,21 @@ export type ZoneAvailability = {
 };
 
 /**
- * Remaining inventory per zone. Seated zones count their unblocked seats;
- * open zones use the declared capacity. Both subtract sold + actively held.
+ * Inventory is per night. A normal zone's capacity resets each night; a season
+ * pass (`allDates`) is sold once and counted across every night, so its rows
+ * are matched without a date filter.
  */
-export function zoneAvailability(eventId: string): Map<string, ZoneAvailability> {
+export function zoneAvailability(
+  eventId: string,
+  showDateId?: string | null,
+): Map<string, ZoneAvailability> {
   reapExpiredHolds();
 
-  const zoneRows = db
-    .select()
-    .from(zones)
-    .where(eq(zones.eventId, eventId))
-    .all();
+  const zoneRows = db.select().from(zones).where(eq(zones.eventId, eventId)).all();
+  const seasonZoneIds = new Set(zoneRows.filter((z) => z.allDates).map((z) => z.id));
+
+  const dateFilter = <T extends { showDateId: unknown }>(col: T["showDateId"]): SQL | undefined =>
+    showDateId ? eq(col as never, showDateId) : undefined;
 
   const soldRows = db
     .select({ zoneId: tickets.zoneId, n: sql<number>`count(*)` })
@@ -39,14 +43,42 @@ export function zoneAvailability(eventId: string): Map<string, ZoneAvailability>
     .groupBy(tickets.zoneId)
     .all();
 
+  const soldThisDate = showDateId
+    ? db
+        .select({ zoneId: tickets.zoneId, n: sql<number>`count(*)` })
+        .from(tickets)
+        .where(
+          and(
+            eq(tickets.eventId, eventId),
+            ne(tickets.status, "cancelled"),
+            dateFilter(tickets.showDateId),
+          ),
+        )
+        .groupBy(tickets.zoneId)
+        .all()
+    : soldRows;
+
   const heldRows = db
     .select({ zoneId: seatHolds.zoneId, n: sql<number>`sum(${seatHolds.qty})` })
     .from(seatHolds)
-    .where(
-      and(eq(seatHolds.eventId, eventId), gt(seatHolds.expiresAt, nowSec())),
-    )
+    .where(and(eq(seatHolds.eventId, eventId), gt(seatHolds.expiresAt, nowSec())))
     .groupBy(seatHolds.zoneId)
     .all();
+
+  const heldThisDate = showDateId
+    ? db
+        .select({ zoneId: seatHolds.zoneId, n: sql<number>`sum(${seatHolds.qty})` })
+        .from(seatHolds)
+        .where(
+          and(
+            eq(seatHolds.eventId, eventId),
+            gt(seatHolds.expiresAt, nowSec()),
+            dateFilter(seatHolds.showDateId),
+          ),
+        )
+        .groupBy(seatHolds.zoneId)
+        .all()
+    : heldRows;
 
   const seatCounts = db
     .select({ zoneId: seats.zoneId, n: sql<number>`count(*)` })
@@ -55,16 +87,18 @@ export function zoneAvailability(eventId: string): Map<string, ZoneAvailability>
     .groupBy(seats.zoneId)
     .all();
 
-  const sold = new Map(soldRows.map((r) => [r.zoneId, Number(r.n)]));
-  const held = new Map(heldRows.map((r) => [r.zoneId, Number(r.n ?? 0)]));
+  const soldAll = new Map(soldRows.map((r) => [r.zoneId, Number(r.n)]));
+  const soldDate = new Map(soldThisDate.map((r) => [r.zoneId, Number(r.n)]));
+  const heldAll = new Map(heldRows.map((r) => [r.zoneId, Number(r.n ?? 0)]));
+  const heldDate = new Map(heldThisDate.map((r) => [r.zoneId, Number(r.n ?? 0)]));
   const seatTotals = new Map(seatCounts.map((r) => [r.zoneId, Number(r.n)]));
 
   const out = new Map<string, ZoneAvailability>();
   for (const z of zoneRows) {
-    const capacity =
-      z.kind === "seated" ? (seatTotals.get(z.id) ?? 0) : z.capacity;
-    const s = sold.get(z.id) ?? 0;
-    const h = held.get(z.id) ?? 0;
+    const season = seasonZoneIds.has(z.id);
+    const capacity = z.kind === "seated" ? (seatTotals.get(z.id) ?? 0) : z.capacity;
+    const s = (season ? soldAll : soldDate).get(z.id) ?? 0;
+    const h = (season ? heldAll : heldDate).get(z.id) ?? 0;
     out.set(z.id, {
       zoneId: z.id,
       capacity,
@@ -76,35 +110,39 @@ export function zoneAvailability(eventId: string): Map<string, ZoneAvailability>
   return out;
 }
 
-/** Seat ids that a buyer may not pick: already ticketed or held by someone else. */
-export function unavailableSeatIds(eventId: string, exceptCartId?: string) {
+/** Seat ids a buyer may not pick on a given night. */
+export function unavailableSeatIds(
+  eventId: string,
+  showDateId?: string | null,
+  exceptCartId?: string,
+) {
   reapExpiredHolds();
+
+  const soldWhere = [
+    eq(tickets.eventId, eventId),
+    ne(tickets.status, "cancelled"),
+    isNotNull(tickets.seatId),
+  ];
+  if (showDateId) soldWhere.push(eq(tickets.showDateId, showDateId));
 
   const sold = db
     .select({ seatId: tickets.seatId })
     .from(tickets)
-    .where(
-      and(
-        eq(tickets.eventId, eventId),
-        ne(tickets.status, "cancelled"),
-        isNotNull(tickets.seatId),
-      ),
-    )
+    .where(and(...soldWhere))
     .all();
+
+  const heldWhere = [eq(seatHolds.eventId, eventId), gt(seatHolds.expiresAt, nowSec())];
+  if (showDateId) heldWhere.push(eq(seatHolds.showDateId, showDateId));
 
   const held = db
     .select({ seatId: seatHolds.seatId, cartId: seatHolds.cartId })
     .from(seatHolds)
-    .where(
-      and(eq(seatHolds.eventId, eventId), gt(seatHolds.expiresAt, nowSec())),
-    )
+    .where(and(...heldWhere))
     .all();
 
   const ids = new Set<string>();
   for (const r of sold) if (r.seatId) ids.add(r.seatId);
-  for (const r of held) {
-    if (r.seatId && r.cartId !== exceptCartId) ids.add(r.seatId);
-  }
+  for (const r of held) if (r.seatId && r.cartId !== exceptCartId) ids.add(r.seatId);
   return ids;
 }
 
@@ -119,10 +157,11 @@ export function releaseCart(cartId: string) {
 export function holdInventory(args: {
   eventId: string;
   cartId: string;
+  showDateId?: string | null;
   seatIds?: string[];
   openQty?: { zoneId: string; qty: number }[];
 }) {
-  const { eventId, cartId, seatIds = [], openQty = [] } = args;
+  const { eventId, cartId, showDateId = null, seatIds = [], openQty = [] } = args;
   const expiresAt = nowSec() + HOLD_SECONDS;
 
   return db.transaction((tx) => {
@@ -130,7 +169,7 @@ export function holdInventory(args: {
     tx.delete(seatHolds).where(sql`${seatHolds.expiresAt} < ${nowSec()}`).run();
 
     if (seatIds.length) {
-      const taken = unavailableSeatIds(eventId, cartId);
+      const taken = unavailableSeatIds(eventId, showDateId, cartId);
       const clash = seatIds.filter((s) => taken.has(s));
       if (clash.length) {
         const labels = tx
@@ -143,18 +182,15 @@ export function holdInventory(args: {
           `These seats were just taken: ${labels.join(", ")}. Please pick others.`,
         );
       }
-      const rows = tx
-        .select()
-        .from(seats)
-        .where(inArray(seats.id, seatIds))
-        .all();
+      const rows = tx.select().from(seats).where(inArray(seats.id, seatIds)).all();
       for (const seat of rows) {
         tx.insert(seatHolds)
           .values({
-            id: `hold_${seat.id}`,
+            id: `hold_${seat.id}_${showDateId ?? "single"}`,
             eventId,
             seatId: seat.id,
             zoneId: seat.zoneId,
+            showDateId,
             qty: 1,
             cartId,
             expiresAt,
@@ -165,7 +201,7 @@ export function holdInventory(args: {
 
     for (const { zoneId, qty } of openQty) {
       if (qty <= 0) continue;
-      const avail = zoneAvailability(eventId).get(zoneId);
+      const avail = zoneAvailability(eventId, showDateId).get(zoneId);
       if (!avail || avail.available < qty) {
         throw new Error("Not enough tickets left in that category.");
       }
@@ -175,6 +211,7 @@ export function holdInventory(args: {
           eventId,
           seatId: null,
           zoneId,
+          showDateId,
           qty,
           cartId,
           expiresAt,

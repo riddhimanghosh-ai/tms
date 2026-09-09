@@ -28,7 +28,7 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
   const data = await loadPublicEvent(org, eventSlug);
   if (!data) notFound();
 
-  const { event, organizer, zones, ticketsSold } = data;
+  const { event, organizer, zones, nights, ticketsSold } = data;
   const onSale = event.status === "published";
   const start = new Date(event.startsAt * 1000);
   const cheapest = zones.filter((z) => !z.soldOut).sort((a, b) => a.priceMinor - b.priceMinor)[0];
@@ -45,10 +45,17 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
     nowSec: data.nowSec,
   });
 
+  const upcoming = nights.filter((n) => !n.past);
+  const multiNight = nights.length > 1;
+  const firstNight = upcoming[0] ?? nights[0] ?? null;
+  const lastNight = nights[nights.length - 1] ?? null;
+
   const facts = [
     {
-      label: "Date",
-      value: start.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }),
+      label: multiNight ? "Runs" : "Date",
+      value: multiNight && firstNight && lastNight
+        ? `${new Date(firstNight.startsAt * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${new Date(lastNight.startsAt * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+        : start.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }),
     },
     {
       label: "Doors",
@@ -58,7 +65,9 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
       }),
     },
     { label: "Venue", value: event.venue ?? "To be announced" },
-    { label: "City", value: event.city ?? "—" },
+    multiNight
+      ? { label: "Nights", value: `${upcoming.length} still open of ${nights.length}` }
+      : { label: "City", value: event.city ?? "—" },
   ];
 
   return (
@@ -105,7 +114,7 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
           ) : null}
 
           <div className="mt-8 max-w-md">
-            <Countdown targetSec={event.startsAt} tone="dark" label="Doors open in" />
+            <Countdown targetSec={firstNight?.startsAt ?? event.startsAt} tone="dark" label={multiNight ? "Next night in" : "Doors open in"} />
           </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -148,6 +157,72 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
           </dl>
         </section>
 
+        {multiNight ? (
+          <section>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+                  {nights.length} nights
+                </h2>
+                <p className="mt-1 text-slate-500">
+                  Each night is booked separately — pick yours at the next step.
+                </p>
+              </div>
+            </div>
+
+            <ul className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {nights.map((n) => {
+                const d = new Date(n.startsAt * 1000);
+                const gone = n.past || n.soldOut;
+                return (
+                  <li
+                    key={n.id}
+                    className={`flex items-center gap-3 rounded-xl border p-3 ${
+                      gone ? "border-slate-200 bg-slate-50" : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <div
+                      className={`w-12 shrink-0 rounded-lg py-1 text-center ${
+                        gone ? "bg-slate-200 text-slate-500" : "bg-slate-900 text-white"
+                      }`}
+                    >
+                      <span className="block text-[10px] uppercase tracking-wide opacity-80">
+                        {d.toLocaleDateString("en-IN", { month: "short" })}
+                      </span>
+                      <span className="block text-base font-semibold leading-tight">
+                        {d.getDate()}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p
+                        className={`truncate text-sm font-medium ${gone ? "text-slate-500" : "text-slate-900"}`}
+                      >
+                        {n.label}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {n.past
+                          ? "Passed"
+                          : n.soldOut
+                            ? "Sold out"
+                            : `${d.toLocaleDateString("en-IN", { weekday: "long" })} · ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`}
+                      </p>
+                    </div>
+                    {!gone ? (
+                      <Link
+                        href={bookHref}
+                        className="ml-auto shrink-0 text-sm font-medium underline"
+                        style={{ color: organizer.brandColor }}
+                      >
+                        Book
+                      </Link>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
+
         {event.description ? (
           <section>
             <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
@@ -166,6 +241,8 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
               <p className="mt-1 text-slate-500">
                 {event.layoutType === "seated"
                   ? "Pick your exact seat at the next step."
+                  : multiNight
+                  ? "Pick your night, then your category."
                   : "Choose a category and how many you need."}
               </p>
             </div>

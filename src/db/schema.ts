@@ -73,12 +73,40 @@ export const events = sqliteTable(
     terms: text("terms"),
     /** PIN typed by gate staff to open the scanner without a full login. */
     gatePin: text("gate_pin"),
+    /** What the focal point is called on the seat map: STAGE, SCREEN, DHOL… */
+    stageLabel: text("stage_label").notNull().default("STAGE"),
+    /** auto | top | bottom | left | right | centre */
+    stagePosition: text("stage_position").notNull().default("auto"),
+    /** auto | bar | curve | circle | none */
+    stageShape: text("stage_shape").notNull().default("auto"),
     createdAt: integer("created_at").notNull().default(now),
   },
   (t) => [
     uniqueIndex("events_org_slug_idx").on(t.organizerId, t.slug),
     index("events_org_idx").on(t.organizerId),
   ],
+);
+
+/**
+ * One night of a multi-night event. A Garba runs nine of these; a one-off show
+ * has a single row. Inventory, seats and passes are all scoped to a night.
+ */
+export const eventDates = sqliteTable(
+  "event_dates",
+  {
+    id: text("id").primaryKey(),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    startsAt: integer("starts_at").notNull(),
+    endsAt: integer("ends_at"),
+    /** "Night 1 — Opening", "Finale". Falls back to the date itself. */
+    label: text("label"),
+    note: text("note"),
+    active: integer("active").notNull().default(1),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("event_dates_event_idx").on(t.eventId)],
 );
 
 /** A priced bucket. "VIP Pass", "Couple Entry", "Balcony Block B". */
@@ -123,6 +151,12 @@ export const zones = sqliteTable(
     arcStartDeg: integer("arc_start_deg").notNull().default(0),
     /** rings/arc: empty space in the middle, as a share of the radius (0-90). */
     innerHolePct: integer("inner_hole_pct").notNull().default(35),
+    /** 1 = one ticket covers every night (a season pass). */
+    allDates: integer("all_dates").notNull().default(0),
+    /** JSON array of hex colours, one per layer. Falls back to `color`. */
+    layerColors: text("layer_colors"),
+    /** JSON array of short notes, one per layer, shown to buyers. */
+    layerNotes: text("layer_notes"),
     salesStartAt: integer("sales_start_at"),
     salesEndAt: integer("sales_end_at"),
     active: integer("active").notNull().default(1),
@@ -178,10 +212,13 @@ export const seatHolds = sqliteTable(
     /** Seat holds use 1; open-ground holds reserve a slice of capacity. */
     qty: integer("qty").notNull().default(1),
     cartId: text("cart_id").notNull(),
+    showDateId: text("show_date_id").references(() => eventDates.id, {
+      onDelete: "cascade",
+    }),
     expiresAt: integer("expires_at").notNull(),
   },
   (t) => [
-    uniqueIndex("seat_holds_seat_idx").on(t.seatId),
+    uniqueIndex("seat_holds_seat_idx").on(t.seatId, t.showDateId),
     index("seat_holds_cart_idx").on(t.cartId),
     index("seat_holds_event_idx").on(t.eventId),
   ],
@@ -269,6 +306,10 @@ export const orders = sqliteTable(
     organizerId: text("organizer_id")
       .notNull()
       .references(() => organizers.id, { onDelete: "cascade" }),
+    showDateId: text("show_date_id").references(() => eventDates.id, {
+      onDelete: "set null",
+    }),
+    showDateLabel: text("show_date_label"),
     buyerName: text("buyer_name").notNull(),
     buyerPhone: text("buyer_phone").notNull(),
     buyerEmail: text("buyer_email"),
@@ -332,6 +373,12 @@ export const tickets = sqliteTable(
     zoneName: text("zone_name").notNull(),
     seatId: text("seat_id").references(() => seats.id, { onDelete: "set null" }),
     seatLabel: text("seat_label"),
+    showDateId: text("show_date_id").references(() => eventDates.id, {
+      onDelete: "set null",
+    }),
+    /** Denormalised so a pass still reads correctly if a night is renamed. */
+    showDateLabel: text("show_date_label"),
+    showDateStartsAt: integer("show_date_starts_at"),
     holderName: text("holder_name"),
     admitsCount: integer("admits_count").notNull().default(1),
     status: text("status").notNull().default("valid"), // valid | checked_in | cancelled
@@ -344,6 +391,7 @@ export const tickets = sqliteTable(
     index("tickets_event_idx").on(t.eventId),
     index("tickets_order_idx").on(t.orderId),
     index("tickets_seat_idx").on(t.seatId),
+    index("tickets_date_idx").on(t.showDateId),
   ],
 );
 
@@ -364,6 +412,7 @@ export const pageViews = sqliteTable(
 
 export type Organizer = typeof organizers.$inferSelect;
 export type Event = typeof events.$inferSelect;
+export type EventDate = typeof eventDates.$inferSelect;
 export type Zone = typeof zones.$inferSelect;
 export type Seat = typeof seats.$inferSelect;
 export type Order = typeof orders.$inferSelect;

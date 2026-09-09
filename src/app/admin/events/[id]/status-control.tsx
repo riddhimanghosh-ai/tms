@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { setEventStatus } from "../../actions";
 import { Select } from "@/components/ui";
+import { toast } from "@/components/toast";
 
 export function StatusControl({
   eventId,
@@ -20,8 +21,14 @@ export function StatusControl({
       disabled={pending}
       onChange={(e) => {
         const next = e.target.value;
-        start(() => {
-          void setEventStatus(eventId, next);
+        start(async () => {
+          await setEventStatus(eventId, next);
+          toast(
+            next === "published"
+              ? "Live — your booking page is now selling"
+              : `Status set to ${next}`,
+            next === "published" ? "ok" : "info",
+          );
         });
       }}
       className="h-10 w-auto"

@@ -3,7 +3,9 @@
 import { useActionState, useState } from "react";
 import { createEvent } from "../../actions";
 import { ShapePreview } from "@/components/seat-map";
-import { Button, Card, Field, Input, cn } from "@/components/ui";
+import { DateTimeField, DurationField } from "@/components/date-time-field";
+import { useActionToast } from "@/components/toast";
+import { Button, Card, Field, FormError, Input, cn } from "@/components/ui";
 import type { ZoneShape } from "@/lib/seat-layout";
 
 type Template = {
@@ -73,6 +75,7 @@ const templates: Template[] = [
 
 export default function NewEventPage() {
   const [state, action, pending] = useActionState(createEvent, undefined);
+  useActionToast(state, { ok: "Event created" });
   const [layout, setLayout] = useState("open");
 
   return (
@@ -82,7 +85,7 @@ export default function NewEventPage() {
         The essentials only. Pricing, codes and the rest come next.
       </p>
 
-      <form action={action} className="mt-6 space-y-8">
+      <form action={action} noValidate className="mt-6 space-y-8">
         <section>
           <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-400">
             1 · The basics
@@ -102,13 +105,14 @@ export default function NewEventPage() {
                 <Input name="city" placeholder="Ahmedabad" />
               </Field>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Starts">
-                <Input name="startsAt" type="datetime-local" required />
-              </Field>
-              <Field label="Ends" hint="Optional — for multi-night events.">
-                <Input name="endsAt" type="datetime-local" />
-              </Field>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <DateTimeField name="startsAt" label="Starts" required />
+              <DurationField
+                name="endsAt"
+                label="Ends"
+                startName="startsAt"
+                hint="Optional. Add the other nights afterwards on the Nights tab."
+              />
             </div>
           </Card>
         </section>
@@ -185,11 +189,7 @@ export default function NewEventPage() {
           </p>
         </section>
 
-        {state && "error" in state && state.error ? (
-          <p className="rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200">
-            {state.error}
-          </p>
-        ) : null}
+        <FormError state={state} />
 
         <div className="flex items-center gap-3">
           <Button size="lg" disabled={pending}>

@@ -1,13 +1,17 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import {
   discountCodes,
+  eventDates,
   events,
+  orderItems,
+  orders,
   referralCodes,
+
   seats,
   tickets,
   zones,
@@ -131,6 +135,15 @@ export async function createEvent(_prev: unknown, form: FormData) {
     regenerateSeats({ zoneId, eventId, shape, rows, cols, rowStart: "A", ring });
   }
 
+  // Even a one-off show gets a night row, so nothing downstream special-cases it.
+  await db.insert(eventDates).values({
+    id: id(),
+    eventId,
+    startsAt,
+    endsAt: ts(form, "endsAt"),
+    sortOrder: 0,
+  });
+
   redirect(`/admin/events/${eventId}/tickets`);
 }
 
@@ -156,6 +169,9 @@ export async function updateEvent(_prev: unknown, form: FormData) {
       maxTicketsPerOrder: Math.max(1, num(form, "maxTicketsPerOrder", 10)),
       terms: str(form, "terms") || null,
       gatePin: str(form, "gatePin") || event.gatePin,
+      stageLabel: str(form, "stageLabel") || "STAGE",
+      stagePosition: str(form, "stagePosition") || "auto",
+      stageShape: str(form, "stageShape") || "auto",
     })
     .where(eq(events.id, eventId));
 
@@ -223,6 +239,9 @@ export async function saveZone(_prev: unknown, form: FormData) {
     minPerOrder: Math.max(1, num(form, "minPerOrder", 1)),
     maxPerOrder: Math.max(1, num(form, "maxPerOrder", 10)),
     color: str(form, "color") || "#3987e5",
+    allDates: form.get("allDates") ? 1 : 0,
+    layerColors: packLayerList(form.getAll("layerColor")),
+    layerNotes: packLayerList(form.getAll("layerNote")),
     rows,
     cols,
     ringCount: ring.ringCount,
@@ -257,6 +276,16 @@ export async function saveZone(_prev: unknown, form: FormData) {
 
   revalidatePath(`/admin/events/${eventId}/tickets`);
   return { ok: true as const, savedAt: Date.now() };
+}
+
+/**
+ * Per-layer colours and notes arrive as repeated fields. Store them as JSON,
+ * and store nothing at all when every entry is blank.
+ */
+function packLayerList(values: FormDataEntryValue[]) {
+  const list = values.map((v) => String(v ?? "").trim());
+  while (list.length && !list[list.length - 1]) list.pop();
+  return list.some(Boolean) ? JSON.stringify(list) : null;
 }
 
 type SeatSpec = {
@@ -543,4 +572,319 @@ export async function undoCheckIn(ticketId: string, eventId: string) {
     .set({ status: "valid", checkedInAt: null, checkedInBy: null })
     .where(eq(tickets.id, ticketId));
   revalidatePath(`/admin/events/${eventId}/checkin`);
+}
+
+/* --------------------------------------------------------------- duplicate */
+
+/**
+ * Clones an event with its ticket types, seat layouts and codes — organisers
+ * run the same show every season and shouldn't rebuild it each time. Orders,
+ * tickets and sales counters are deliberately left behind.
+ */
+export async function duplicateEvent(eventId: string) {
+  const { organizer, event } = await ownedEvent(eventId);
+
+  let slug = `${event.slug}-copy`;
+  while (
+    await db
+      .select()
+      .from(events)
+      .where(and(eq(events.organizerId, organizer.id), eq(events.slug, slug)))
+      .get()
+  ) {
+    slug = `${event.slug}-copy-${Math.floor(Math.random() * 900 + 100)}`;
+  }
+
+  const newId = id();
+  const sourceZones = await db.select().from(zones).where(eq(zones.eventId, eventId)).all();
+  const sourceDiscounts = await db
+    .select()
+    .from(discountCodes)
+    .where(eq(discountCodes.eventId, eventId))
+    .all();
+  const sourceReferrals = await db
+    .select()
+    .from(referralCodes)
+    .where(eq(referralCodes.eventId, eventId))
+    .all();
+
+  db.transaction((tx) => {
+    tx.insert(events)
+      .values({
+        ...event,
+        id: newId,
+        slug,
+        title: `${event.title} (copy)`,
+        status: "draft",
+        createdAt: Math.floor(Date.now() / 1000),
+      })
+      .run();
+
+    const zoneIdMap = new Map<string, string>();
+    for (const zone of sourceZones) {
+      const zoneId = id();
+      zoneIdMap.set(zone.id, zoneId);
+      tx.insert(zones).values({ ...zone, id: zoneId, eventId: newId }).run();
+    }
+
+    for (const code of sourceDiscounts) {
+      tx.insert(discountCodes)
+        .values({
+          ...code,
+          id: id(),
+          eventId: newId,
+          // A copy starts its redemption count fresh.
+          usedCount: 0,
+          zoneId: code.zoneId ? (zoneIdMap.get(code.zoneId) ?? null) : null,
+          code: `${code.code}-2`,
+        })
+        .run();
+    }
+
+    for (const code of sourceReferrals) {
+      tx.insert(referralCodes)
+        .values({ ...code, id: id(), eventId: newId, clicks: 0, code: `${code.code}-2` })
+        .run();
+    }
+  });
+
+  // Seats are regenerated from each zone's own configuration.
+  for (const zone of sourceZones) {
+    if (zone.kind !== "seated") continue;
+    const copied = await db
+      .select()
+      .from(zones)
+      .where(and(eq(zones.eventId, newId), eq(zones.name, zone.name)))
+      .get();
+    if (!copied) continue;
+    regenerateSeats({
+      zoneId: copied.id,
+      eventId: newId,
+      shape: zone.shape as ZoneShape,
+      rows: zone.rows,
+      cols: zone.cols,
+      rowStart: "A",
+      ring: {
+        shape: zone.shape as ZoneShape,
+        ringCount: zone.ringCount,
+        ringStartSeats: zone.ringStartSeats,
+        ringSeatStep: zone.ringSeatStep,
+        arcSpanDeg: zone.arcSpanDeg,
+        arcStartDeg: zone.arcStartDeg,
+        innerHolePct: zone.innerHolePct,
+      },
+    });
+  }
+
+  redirect(`/admin/events/${newId}/settings`);
+}
+
+/* ------------------------------------------------------------ seat editing */
+
+/** Block or unblock a whole row or ring in one action. */
+export async function setSeatsBlocked(
+  eventId: string,
+  seatIds: string[],
+  blocked: boolean,
+) {
+  await ownedEvent(eventId);
+  if (!seatIds.length) return { changed: 0 };
+
+  const sold = new Set(
+    (
+      await db
+        .select({ seatId: tickets.seatId })
+        .from(tickets)
+        .where(and(eq(tickets.eventId, eventId), inArray(tickets.seatId, seatIds)))
+        .all()
+    )
+      .map((t) => t.seatId)
+      .filter(Boolean) as string[],
+  );
+
+  const editable = seatIds.filter((sid) => !sold.has(sid));
+  if (editable.length) {
+    await db
+      .update(seats)
+      .set({ status: blocked ? "blocked" : "available" })
+      .where(and(eq(seats.eventId, eventId), inArray(seats.id, editable)));
+  }
+
+  revalidatePath(`/admin/events/${eventId}/tickets`);
+  return { changed: editable.length, skipped: seatIds.length - editable.length };
+}
+
+/* ---------------------------------------------------------------- orders */
+
+/**
+ * Cancels a paid order: passes stop scanning and the seats or capacity return
+ * to the pool immediately, since availability counts non-cancelled tickets.
+ */
+export async function cancelOrder(orderId: string, reason: "refunded" | "cancelled") {
+  const order = await db.select().from(orders).where(eq(orders.id, orderId)).get();
+  if (!order) throw new Error("Order not found.");
+  await ownedEvent(order.eventId);
+
+  db.transaction((tx) => {
+    tx.update(tickets).set({ status: "cancelled" }).where(eq(tickets.orderId, orderId)).run();
+    tx.update(orders).set({ status: reason }).where(eq(orders.id, orderId)).run();
+
+    // Give a limited-use code its redemption back.
+    if (order.discountCodeId && order.status === "paid") {
+      tx.update(discountCodes)
+        .set({ usedCount: sql`max(0, ${discountCodes.usedCount} - 1)` })
+        .where(eq(discountCodes.id, order.discountCodeId))
+        .run();
+    }
+  });
+
+  revalidatePath(`/admin/events/${order.eventId}`, "layout");
+  return { ok: true as const };
+}
+
+/** Full detail for the order drawer — items, passes and their entry state. */
+export async function orderDetail(orderId: string) {
+  const order = await db.select().from(orders).where(eq(orders.id, orderId)).get();
+  if (!order) throw new Error("Order not found.");
+  await ownedEvent(order.eventId);
+
+  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId)).all();
+  const passes = await db.select().from(tickets).where(eq(tickets.orderId, orderId)).all();
+
+  return {
+    order,
+    items: items.map((i) => ({
+      zoneName: i.zoneName,
+      qty: i.qty,
+      unitPriceMinor: i.unitPriceMinor,
+    })),
+    passes: passes.map((t) => ({
+      id: t.id,
+      code: t.code,
+      zoneName: t.zoneName,
+      seatLabel: t.seatLabel,
+      status: t.status,
+      checkedInAt: t.checkedInAt,
+      admitsCount: t.admitsCount,
+    })),
+  };
+}
+
+/* ------------------------------------------------------------------ nights */
+
+/**
+ * Multi-night events are the norm here — a Navratri run is nine nights sold
+ * separately. Inventory, seats and passes are all scoped to the night, so a
+ * single-night event simply has one row and the buyer never sees a picker.
+ */
+export async function addEventDate(_prev: unknown, form: FormData) {
+  const eventId = str(form, "eventId");
+  await ownedEvent(eventId);
+
+  const startsAt = ts(form, "startsAt");
+  if (!startsAt) return { error: "Pick a date and time for this night." };
+
+  const existing = await db
+    .select()
+    .from(eventDates)
+    .where(eq(eventDates.eventId, eventId))
+    .all();
+
+  if (existing.some((n) => n.startsAt === startsAt))
+    return { error: "That night is already on the list." };
+
+  await db.insert(eventDates).values({
+    id: id(),
+    eventId,
+    startsAt,
+    endsAt: ts(form, "endsAt"),
+    label: str(form, "label") || null,
+    note: str(form, "note") || null,
+    sortOrder: existing.length,
+  });
+
+  revalidatePath(`/admin/events/${eventId}/dates`);
+  return { ok: true as const, savedAt: Date.now() };
+}
+
+/** Adds a run of consecutive nights in one go — nine taps become one. */
+export async function addNightRun(_prev: unknown, form: FormData) {
+  const eventId = str(form, "eventId");
+  const { event } = await ownedEvent(eventId);
+
+  const startsAt = ts(form, "startsAt") ?? event.startsAt;
+  const count = Math.max(1, Math.min(60, num(form, "count", 9)));
+  const prefix = str(form, "prefix") || "Night";
+
+  const existing = await db
+    .select()
+    .from(eventDates)
+    .where(eq(eventDates.eventId, eventId))
+    .all();
+  const taken = new Set(existing.map((n) => n.startsAt));
+
+  const rows = [];
+  for (let i = 0; i < count; i++) {
+    const at = startsAt + i * 86400;
+    if (taken.has(at)) continue;
+    rows.push({
+      id: id(),
+      eventId,
+      startsAt: at,
+      label: `${prefix} ${existing.length + rows.length + 1}`,
+      sortOrder: existing.length + rows.length,
+    });
+  }
+
+  if (rows.length) await db.insert(eventDates).values(rows);
+
+  revalidatePath(`/admin/events/${eventId}/dates`);
+  return { ok: true as const, added: rows.length, savedAt: Date.now() };
+}
+
+export async function updateEventDate(_prev: unknown, form: FormData) {
+  const eventId = str(form, "eventId");
+  await ownedEvent(eventId);
+  const dateId = str(form, "dateId");
+  const startsAt = ts(form, "startsAt");
+  if (!dateId || !startsAt) return { error: "Pick a date and time for this night." };
+
+  await db
+    .update(eventDates)
+    .set({
+      startsAt,
+      endsAt: ts(form, "endsAt"),
+      label: str(form, "label") || null,
+      note: str(form, "note") || null,
+      active: form.get("active") ? 1 : 0,
+    })
+    .where(and(eq(eventDates.id, dateId), eq(eventDates.eventId, eventId)));
+
+  revalidatePath(`/admin/events/${eventId}/dates`);
+  return { ok: true as const, savedAt: Date.now() };
+}
+
+export async function deleteEventDate(dateId: string, eventId: string) {
+  await ownedEvent(eventId);
+
+  const soldOnNight = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(tickets)
+    .where(and(eq(tickets.eventId, eventId), eq(tickets.showDateId, dateId)))
+    .get();
+
+  if (Number(soldOnNight?.n ?? 0) > 0)
+    throw new Error("Passes have been sold for this night — pause it instead of deleting it.");
+
+  await db.delete(eventDates).where(eq(eventDates.id, dateId));
+  revalidatePath(`/admin/events/${eventId}/dates`);
+}
+
+export async function setEventDateActive(dateId: string, eventId: string, active: boolean) {
+  await ownedEvent(eventId);
+  await db
+    .update(eventDates)
+    .set({ active: active ? 1 : 0 })
+    .where(and(eq(eventDates.id, dateId), eq(eventDates.eventId, eventId)));
+  revalidatePath(`/admin/events/${eventId}/dates`);
 }

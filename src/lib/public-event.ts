@@ -1,11 +1,27 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { events, organizers, orders, seats, zones } from "@/db/schema";
+import { eventDates, events, orders, organizers, seats, zones } from "@/db/schema";
+import { nightLabel } from "./booking";
+import { parseLayerList } from "./seat-layout";
 import { unavailableSeatIds, zoneAvailability } from "./inventory";
 import type { PublicSeat, PublicZone } from "@/components/booking/booking-widget";
 
+export type PublicNight = {
+  id: string;
+  startsAt: number;
+  endsAt: number | null;
+  label: string;
+  note: string | null;
+  soldOut: boolean;
+  past: boolean;
+};
+
 /** Everything a public booking surface needs, for both the page and the embed. */
-export async function loadPublicEvent(orgSlug: string, eventSlug: string) {
+export async function loadPublicEvent(
+  orgSlug: string,
+  eventSlug: string,
+  selectedNightId?: string | null,
+) {
   const row = await db
     .select({ event: events, organizer: organizers })
     .from(events)
@@ -15,7 +31,20 @@ export async function loadPublicEvent(orgSlug: string, eventSlug: string) {
   if (!row) return null;
 
   const { event, organizer } = row;
-  const avail = zoneAvailability(event.id);
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  const nightRows = await db
+    .select()
+    .from(eventDates)
+    .where(and(eq(eventDates.eventId, event.id), eq(eventDates.active, 1)))
+    .orderBy(asc(eventDates.sortOrder), asc(eventDates.startsAt))
+    .all();
+
+  const upcoming = nightRows.filter((n) => n.startsAt >= nowSec - 6 * 3600);
+  const chosen =
+    nightRows.find((n) => n.id === selectedNightId) ?? upcoming[0] ?? nightRows[0] ?? null;
+
+  const avail = zoneAvailability(event.id, chosen?.id ?? null);
 
   const zoneRows = await db
     .select()
@@ -36,6 +65,7 @@ export async function loadPublicEvent(orgSlug: string, eventSlug: string) {
       minPerOrder: z.minPerOrder,
       maxPerOrder: z.maxPerOrder,
       color: z.color,
+      allDates: z.allDates === 1,
       shape: (z.shape as PublicZone["shape"]) ?? "grid",
       rows: z.rows,
       cols: z.cols,
@@ -45,6 +75,8 @@ export async function loadPublicEvent(orgSlug: string, eventSlug: string) {
       arcSpanDeg: z.arcSpanDeg,
       arcStartDeg: z.arcStartDeg,
       innerHolePct: z.innerHolePct,
+      layerColors: parseLayerList(z.layerColors),
+      layerNotes: parseLayerList(z.layerNotes),
       available: a?.available ?? 0,
       soldOut: (a?.available ?? 0) <= 0,
     };
@@ -52,12 +84,8 @@ export async function loadPublicEvent(orgSlug: string, eventSlug: string) {
 
   let publicSeats: PublicSeat[] = [];
   if (event.layoutType === "seated") {
-    const taken = unavailableSeatIds(event.id);
-    const seatRows = await db
-      .select()
-      .from(seats)
-      .where(eq(seats.eventId, event.id))
-      .all();
+    const taken = unavailableSeatIds(event.id, chosen?.id ?? null);
+    const seatRows = await db.select().from(seats).where(eq(seats.eventId, event.id)).all();
     publicSeats = seatRows.map((s) => ({
       id: s.id,
       zoneId: s.zoneId,
@@ -73,9 +101,21 @@ export async function loadPublicEvent(orgSlug: string, eventSlug: string) {
     }));
   }
 
-  const totalAvailable = publicZones.reduce((n, z) => n + z.available, 0);
+  // Each night gets its own sold-out flag, so the picker can grey one out.
+  const nights: PublicNight[] = nightRows.map((n) => {
+    const nightAvail = zoneAvailability(event.id, n.id);
+    const free = [...nightAvail.values()].reduce((sum, z) => sum + z.available, 0);
+    return {
+      id: n.id,
+      startsAt: n.startsAt,
+      endsAt: n.endsAt,
+      label: nightLabel(n),
+      note: n.note,
+      soldOut: free <= 0,
+      past: n.startsAt < nowSec - 6 * 3600,
+    };
+  });
 
-  // Social proof on the landing page comes from real paid orders, not a guess.
   const sold = await db
     .select({ n: sql<number>`coalesce(sum(${orders.ticketCount}), 0)` })
     .from(orders)
@@ -87,9 +127,11 @@ export async function loadPublicEvent(orgSlug: string, eventSlug: string) {
     organizer,
     zones: publicZones,
     seats: publicSeats,
-    totalAvailable,
+    nights,
+    selectedNightId: chosen?.id ?? null,
+    totalAvailable: publicZones.reduce((n, z) => n + z.available, 0),
     ticketsSold: Number(sold?.n ?? 0),
     // Read the clock here so pages stay free of impure calls during render.
-    nowSec: Math.floor(Date.now() / 1000),
+    nowSec,
   };
 }

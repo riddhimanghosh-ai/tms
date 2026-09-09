@@ -35,7 +35,7 @@ export const SHAPES: {
 ];
 
 export const VIEW = 1000;
-const CENTRE = VIEW / 2;
+export const CENTRE = VIEW / 2;
 const OUTER_R = 468;
 
 export type RingConfig = {
@@ -134,4 +134,165 @@ export function gridSeatPoint(rows: number, cols: number, row: number, col: numb
 
 export function zoneSeatTotal(cfg: RingConfig & { rows: number; cols: number }) {
   return cfg.shape === "grid" ? cfg.rows * cfg.cols : ringTotalSeats(cfg);
+}
+
+
+/* ------------------------------------------------------------------ stage */
+
+export type StagePosition = "auto" | "top" | "bottom" | "left" | "right" | "centre";
+export type StageShape = "auto" | "bar" | "curve" | "circle" | "none";
+
+export type StageConfig = {
+  label: string;
+  position: StagePosition;
+  shape: StageShape;
+};
+
+export const STAGE_POSITIONS: { value: StagePosition; label: string }[] = [
+  { value: "auto", label: "Match the layout" },
+  { value: "top", label: "Top" },
+  { value: "bottom", label: "Bottom" },
+  { value: "left", label: "Left" },
+  { value: "right", label: "Right" },
+  { value: "centre", label: "Centre" },
+];
+
+export const STAGE_SHAPES: { value: StageShape; label: string }[] = [
+  { value: "auto", label: "Match the layout" },
+  { value: "bar", label: "Straight bar" },
+  { value: "curve", label: "Curved screen" },
+  { value: "circle", label: "Centre circle" },
+  { value: "none", label: "Hide it" },
+];
+
+export const STAGE_LABEL_PRESETS = ["STAGE", "SCREEN", "DHOL", "CENTRE", "ALTAR", "PITCH"];
+
+/**
+ * Resolves "auto" into something sensible for the shape: rings play to the
+ * middle, arcs and grids play to a stage the audience faces.
+ */
+export function resolveStage(stage: StageConfig, shape: ZoneShape) {
+  const position: Exclude<StagePosition, "auto"> =
+    stage.position !== "auto"
+      ? stage.position
+      : shape === "rings"
+        ? "centre"
+        : shape === "arc"
+          ? "centre"
+          : "top";
+
+  const resolvedShape: Exclude<StageShape, "auto"> =
+    stage.shape !== "auto"
+      ? stage.shape
+      : position === "centre"
+        ? "circle"
+        : shape === "grid"
+          ? "bar"
+          : "curve";
+
+  return { label: stage.label || "STAGE", position, shape: resolvedShape };
+}
+
+export type StageGeometry = {
+  kind: "circle" | "bar" | "curve";
+  /** circle */
+  cx: number;
+  cy: number;
+  r: number;
+  /** bar */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** curve */
+  path: string;
+  /** where the label sits */
+  labelX: number;
+  labelY: number;
+  rotate: number;
+};
+
+/** Pixel geometry for the stage marker inside the 1000×1000 viewBox. */
+export function stageGeometry(
+  resolved: ReturnType<typeof resolveStage>,
+  innerRadius: number,
+): StageGeometry | null {
+  if (resolved.shape === "none") return null;
+
+  const base: StageGeometry = {
+    kind: "bar",
+    cx: CENTRE,
+    cy: CENTRE,
+    r: 0,
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    path: "",
+    labelX: CENTRE,
+    labelY: CENTRE,
+    rotate: 0,
+  };
+
+  if (resolved.position === "centre" || resolved.shape === "circle") {
+    const r = Math.max(30, Math.min(150, innerRadius * 0.66));
+    return { ...base, kind: "circle", cx: CENTRE, cy: CENTRE, r, labelX: CENTRE, labelY: CENTRE + 8 };
+  }
+
+  const thickness = 34;
+  const length = VIEW * 0.56;
+  const inset = 6;
+
+  const layouts = {
+    top: { x: (VIEW - length) / 2, y: inset, width: length, height: thickness, rotate: 0 },
+    bottom: {
+      x: (VIEW - length) / 2,
+      y: VIEW - inset - thickness,
+      width: length,
+      height: thickness,
+      rotate: 0,
+    },
+    left: { x: inset, y: (VIEW - length) / 2, width: thickness, height: length, rotate: -90 },
+    right: {
+      x: VIEW - inset - thickness,
+      y: (VIEW - length) / 2,
+      width: thickness,
+      height: length,
+      rotate: 90,
+    },
+  } as const;
+
+  const l = layouts[resolved.position as keyof typeof layouts];
+  const labelX = l.x + l.width / 2;
+  const labelY = l.y + l.height / 2 + 7;
+
+  if (resolved.shape === "curve") {
+    const bow = 26;
+    const path =
+      resolved.position === "top"
+        ? `M${l.x},${l.y + l.height} Q${CENTRE},${l.y - bow} ${l.x + l.width},${l.y + l.height}`
+        : resolved.position === "bottom"
+          ? `M${l.x},${l.y} Q${CENTRE},${l.y + l.height + bow} ${l.x + l.width},${l.y}`
+          : resolved.position === "left"
+            ? `M${l.x + l.width},${l.y} Q${l.x - bow},${CENTRE} ${l.x + l.width},${l.y + l.height}`
+            : `M${l.x},${l.y} Q${l.x + l.width + bow},${CENTRE} ${l.x},${l.y + l.height}`;
+    return { ...base, kind: "curve", ...l, path, labelX, labelY };
+  }
+
+  return { ...base, kind: "bar", ...l, labelX, labelY };
+}
+
+/** Per-layer colours/notes are stored as JSON; read them back defensively. */
+export function parseLayerList(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map((v) => (typeof v === "string" ? v : "")) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function layerColor(layerColors: string[], fallback: string, index: number) {
+  return layerColors[index] || fallback;
 }
