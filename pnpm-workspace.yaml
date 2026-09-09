@@ -1,8 +1,9 @@
-allowBuilds:
-  better-sqlite3: set this to true or false
-  esbuild: set this to true or false
-  sharp: false
-  unrs-resolver: false
+# pnpm blocks postinstall scripts unless a package is listed here. The
+# placeholder values pnpm writes when prompting are not valid in CI, which is
+# what failed the first Vercel build.
 onlyBuiltDependencies:
-  - better-sqlite3
   - esbuild
+
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
