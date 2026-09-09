@@ -10,7 +10,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts",
-    "db:reset": "rm -f data.db data.db-shm data.db-wal && pnpm db:push && pnpm db:seed",
+    "db:reset": "pnpm db:push && pnpm db:seed",
     "check:booking": "tsx scripts/check-booking.ts"
   },
   "dependencies": {
