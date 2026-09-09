@@ -1,8 +1,8 @@
 /**
  * Drop-in loader for an organiser's existing website:
  *
- *   <div id="gathara-tickets"></div>
- *   <script src="https://…/embed.js" data-event="org/event" data-target="#gathara-tickets" async></script>
+ *   <div id="rasana-tickets"></div>
+ *   <script src="https://…/embed.js" data-event="org/event" data-target="#rasana-tickets" async></script>
  *
  * Injects an iframe and keeps its height in sync with the booking form.
  */
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   if (!script) return;
 
   var slug = script.getAttribute("data-event");
-  if (!slug) { console.error("[gathara] data-event is required, e.g. my-org/my-event"); return; }
+  if (!slug) { console.error("[rasana] data-event is required, e.g. my-org/my-event"); return; }
 
   var selector = script.getAttribute("data-target");
   var mount = selector ? document.querySelector(selector) : null;
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
   mount.appendChild(frame);
 
   window.addEventListener("message", function (event) {
-    if (!event.data || event.data.type !== "gathara:height") return;
+    if (!event.data || event.data.type !== "rasana:height") return;
     if (event.source !== frame.contentWindow) return;
     frame.style.height = Math.max(420, event.data.height) + "px";
   });

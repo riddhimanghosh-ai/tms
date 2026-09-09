@@ -48,11 +48,11 @@ export function EmbedPanel({
   const embedUrl = `${origin}/embed/${orgSlug}/${eventSlug}`;
 
   const scriptSnippet = `<!-- Paste where the booking section should appear -->
-<div id="gathara-tickets"></div>
+<div id="rasana-tickets"></div>
 <script
   src="${origin}/embed.js"
   data-event="${orgSlug}/${eventSlug}"
-  data-target="#gathara-tickets"
+  data-target="#rasana-tickets"
   async
 ></script>`;
 
@@ -77,7 +77,7 @@ ${url}`;
   return (
     <div className="max-w-3xl space-y-6">
       {!published ? (
-        <div className="rounded-[--radius-card] border border-amber-900 bg-amber-950/50 p-4 text-sm text-amber-200">
+        <div className="rounded-[--radius-card] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           This event is not published yet, so the links below will show a
           &ldquo;not on sale&rdquo; page to visitors. Switch the status to{" "}
           <strong>Published</strong> when you&apos;re ready.

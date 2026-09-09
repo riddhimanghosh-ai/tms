@@ -13,6 +13,7 @@ import {
   organizers,
   pageViews,
   referralCodes,
+  scans,
   seats,
   tickets,
   zones,
@@ -24,7 +25,7 @@ import { id, orderPublicId, ticketCode } from "../src/lib/ids";
 const DAY = 86400;
 const now = Math.floor(Date.now() / 1000);
 
-for (const t of [pageViews, tickets, orderItems, orders, referralCodes, discountCodes, seats, zones, eventDates, events, organizers]) {
+for (const t of [scans, pageViews, tickets, orderItems, orders, referralCodes, discountCodes, seats, zones, eventDates, events, organizers]) {
   db.delete(t).run();
 }
 
@@ -65,6 +66,16 @@ db.insert(events)
     bookingFeeFlatMinor: 1000,
     maxTicketsPerOrder: 10,
     gatePin: "4321",
+    allowReentry: 1,
+    reentryCooldownMins: 10,
+    highlights: JSON.stringify([
+      { icon: "music", label: "Live Music" },
+      { icon: "dance", label: "Traditional Vibes" },
+      { icon: "star", label: "Special Artists" },
+      { icon: "food", label: "Food Stalls" },
+    ]),
+    coverImageUrl:
+      "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1600&q=70",
     stageLabel: "DHOL",
     stagePosition: "centre",
     stageShape: "circle",
@@ -137,6 +148,11 @@ db.insert(events)
     bookingFeeBps: 300,
     maxTicketsPerOrder: 6,
     gatePin: "1122",
+    highlights: JSON.stringify([
+      { icon: "star", label: "Reserved Seating" },
+      { icon: "ac", label: "Air Conditioned" },
+      { icon: "music", label: "Live Orchestra" },
+    ]),
     stageLabel: "STAGE",
     stagePosition: "top",
     stageShape: "curve",
@@ -214,6 +230,13 @@ db.insert(events)
     bookingFeeBps: 200,
     maxTicketsPerOrder: 8,
     gatePin: "7788",
+    allowReentry: 1,
+    highlights: JSON.stringify([
+      { icon: "dance", label: "In The Round" },
+      { icon: "music", label: "Centre Dhol" },
+      { icon: "food", label: "Food Stalls" },
+      { icon: "family", label: "Family Friendly" },
+    ]),
     stageLabel: "DHOL",
     stagePosition: "centre",
     stageShape: "circle",
@@ -522,6 +545,33 @@ for (let daysAgo = 21; daysAgo >= 0; daysAgo--) {
         source: rand(["web", "embed", "whatsapp"]),
         createdAt: now - daysAgo * DAY - Math.floor(Math.random() * DAY),
       })
+      .run();
+  }
+}
+
+// Put a realistic slice of the crowd through the gate on the demo events.
+const gateTickets = db.select().from(tickets).all();
+for (const t of gateTickets) {
+  if (Math.random() > 0.28) continue;
+  const enteredAt = now - Math.floor(Math.random() * 3600);
+  const steppedOut = Math.random() < 0.18;
+  db.update(tickets)
+    .set({
+      status: "checked_in",
+      inside: steppedOut ? 0 : 1,
+      checkedInAt: enteredAt,
+      checkedInBy: "gate",
+      lastScanAt: steppedOut ? enteredAt + 900 : enteredAt,
+      entryCount: 1,
+    })
+    .where(eq(tickets.id, t.id))
+    .run();
+  db.insert(scans)
+    .values({ id: id(), ticketId: t.id, eventId: t.eventId, showDateId: t.showDateId, direction: "in", at: enteredAt, by: "gate" })
+    .run();
+  if (steppedOut) {
+    db.insert(scans)
+      .values({ id: id(), ticketId: t.id, eventId: t.eventId, showDateId: t.showDateId, direction: "out", at: enteredAt + 900, by: "gate" })
       .run();
   }
 }

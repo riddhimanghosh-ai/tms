@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
@@ -11,6 +11,7 @@ import {
   orderItems,
   orders,
   referralCodes,
+  scans,
 
   seats,
   tickets,
@@ -19,6 +20,7 @@ import {
 import { requireOrganizer } from "@/lib/auth";
 import { id, slugify } from "@/lib/ids";
 import { rupeesToMinor } from "@/lib/money";
+import { packHighlights, type Highlight, type HighlightIcon } from "@/lib/highlights";
 import {
   ringSeatLabel,
   ringRowLabel,
@@ -144,36 +146,60 @@ export async function createEvent(_prev: unknown, form: FormData) {
     sortOrder: 0,
   });
 
-  redirect(`/admin/events/${eventId}/tickets`);
+  redirect(`/admin/events/${eventId}/setup?step=venue`);
 }
 
+/**
+ * Patches only the fields a form actually submitted. The settings page and the
+ * setup wizard's steps post different subsets, and a partial form must never
+ * blank out what it doesn't show.
+ */
 export async function updateEvent(_prev: unknown, form: FormData) {
   const eventId = str(form, "eventId");
   const { event } = await ownedEvent(eventId);
 
-  await db
-    .update(events)
-    .set({
-      title: str(form, "title") || event.title,
-      tagline: str(form, "tagline") || null,
-      description: str(form, "description") || null,
-      venue: str(form, "venue") || null,
-      city: str(form, "city") || null,
-      address: str(form, "address") || null,
-      coverImageUrl: str(form, "coverImageUrl") || null,
-      startsAt: ts(form, "startsAt") ?? event.startsAt,
-      endsAt: ts(form, "endsAt"),
-      doorsOpenAt: ts(form, "doorsOpenAt"),
-      bookingFeeBps: Math.round(num(form, "bookingFeePct") * 100),
-      bookingFeeFlatMinor: rupeesToMinor(num(form, "bookingFeeFlat")),
-      maxTicketsPerOrder: Math.max(1, num(form, "maxTicketsPerOrder", 10)),
-      terms: str(form, "terms") || null,
-      gatePin: str(form, "gatePin") || event.gatePin,
-      stageLabel: str(form, "stageLabel") || "STAGE",
-      stagePosition: str(form, "stagePosition") || "auto",
-      stageShape: str(form, "stageShape") || "auto",
-    })
-    .where(eq(events.id, eventId));
+  const has = (key: string) => form.has(key);
+  const patch: Record<string, unknown> = {};
+
+  if (has("title")) patch.title = str(form, "title") || event.title;
+  if (has("tagline")) patch.tagline = str(form, "tagline") || null;
+  if (has("description")) patch.description = str(form, "description") || null;
+  if (has("venue")) patch.venue = str(form, "venue") || null;
+  if (has("city")) patch.city = str(form, "city") || null;
+  if (has("address")) patch.address = str(form, "address") || null;
+  if (has("coverImageUrl")) patch.coverImageUrl = str(form, "coverImageUrl") || null;
+  if (has("startsAt")) patch.startsAt = ts(form, "startsAt") ?? event.startsAt;
+  if (has("endsAt")) patch.endsAt = ts(form, "endsAt");
+  if (has("doorsOpenAt")) patch.doorsOpenAt = ts(form, "doorsOpenAt");
+  if (has("bookingFeePct")) patch.bookingFeeBps = Math.round(num(form, "bookingFeePct") * 100);
+  if (has("bookingFeeFlat")) patch.bookingFeeFlatMinor = rupeesToMinor(num(form, "bookingFeeFlat"));
+  if (has("maxTicketsPerOrder"))
+    patch.maxTicketsPerOrder = Math.max(1, num(form, "maxTicketsPerOrder", 10));
+  if (has("terms")) patch.terms = str(form, "terms") || null;
+  if (has("gatePin")) patch.gatePin = str(form, "gatePin") || event.gatePin;
+  if (has("stageLabel")) patch.stageLabel = str(form, "stageLabel") || "STAGE";
+  if (has("stagePosition")) patch.stagePosition = str(form, "stagePosition") || "auto";
+  if (has("stageShape")) patch.stageShape = str(form, "stageShape") || "auto";
+
+  // Checkboxes only appear in the payload when ticked, so they need a marker
+  // field to tell "unticked" apart from "this form doesn't manage it".
+  if (has("reentrySection")) {
+    patch.allowReentry = form.get("allowReentry") ? 1 : 0;
+    patch.reentryCooldownMins = Math.max(0, Math.min(240, num(form, "reentryCooldownMins")));
+  }
+  if (has("listingSection")) patch.listPublicly = form.get("listPublicly") ? 1 : 0;
+  if (has("highlightsSection")) {
+    patch.highlights = packHighlights(
+      form.getAll("highlightIcon").map((icon, i) => ({
+        icon: String(icon) as HighlightIcon,
+        label: String(form.getAll("highlightLabel")[i] ?? "").trim(),
+      })) as Highlight[],
+    );
+  }
+
+  if (Object.keys(patch).length) {
+    await db.update(events).set(patch).where(eq(events.id, eventId));
+  }
 
   revalidatePath(`/admin/events/${eventId}`, "layout");
   return { ok: true as const, savedAt: Date.now() };
@@ -529,10 +555,42 @@ export async function deleteCode(kind: "discount" | "referral", codeId: string, 
 
 /* ---------------------------------------------------------------- check-in */
 
-export async function checkInTicket(eventId: string, rawCode: string) {
-  await ownedEvent(eventId);
+export type ScanMode = "auto" | "in" | "out";
+
+export type ScanResult = {
+  status: "in" | "out" | "duplicate" | "invalid" | "error" | "cooldown";
+  message: string;
+  detail?: string;
+  ticket?: {
+    id: string;
+    code: string;
+    holderName: string | null;
+    zoneName: string;
+    seatLabel: string | null;
+    admitsCount: number;
+    showDateLabel: string | null;
+    entryCount: number;
+    inside: number;
+  };
+};
+
+/**
+ * One entry point for the gate.
+ *
+ * With re-entry off an event behaves as before: first scan admits, any later
+ * scan is a duplicate. With it on the same QR toggles — scan on the way out,
+ * scan again on the way back — so a pass is a membership for the night rather
+ * than a one-shot token. `mode` lets a lane be dedicated to entry or exit;
+ * "auto" reads the pass's current state.
+ */
+export async function scanTicket(
+  eventId: string,
+  rawCode: string,
+  mode: ScanMode = "auto",
+): Promise<ScanResult> {
+  const { event } = await ownedEvent(eventId);
   const code = rawCode.trim().toUpperCase().replace(/\s+/g, "");
-  if (!code) return { status: "error" as const, message: "Scan or type a code." };
+  if (!code) return { status: "error", message: "Scan or type a code." };
 
   const ticket = await db
     .select()
@@ -541,36 +599,168 @@ export async function checkInTicket(eventId: string, rawCode: string) {
     .get();
 
   if (!ticket)
-    return { status: "invalid" as const, message: "Not a valid pass for this event." };
+    return { status: "invalid", message: "Not a valid pass", detail: "No such code for this event." };
+
+  const summary = {
+    id: ticket.id,
+    code: ticket.code,
+    holderName: ticket.holderName,
+    zoneName: ticket.zoneName,
+    seatLabel: ticket.seatLabel,
+    admitsCount: ticket.admitsCount,
+    showDateLabel: ticket.showDateLabel,
+    entryCount: ticket.entryCount,
+    inside: ticket.inside,
+  };
+
   if (ticket.status === "cancelled")
-    return { status: "invalid" as const, message: "This pass was cancelled.", ticket };
-  if (ticket.status === "checked_in") {
+    return { status: "invalid", message: "Pass cancelled", detail: "This booking was refunded.", ticket: summary };
+
+  const now = Math.floor(Date.now() / 1000);
+  const reentry = event.allowReentry === 1;
+
+  // Without re-entry the old contract holds: one scan, then it's spent.
+  if (!reentry) {
+    if (ticket.inside || ticket.status === "checked_in") {
+      return {
+        status: "duplicate",
+        message: "Already scanned",
+        detail: `Entered at ${stampTime(ticket.checkedInAt)}.`,
+        ticket: summary,
+      };
+    }
+    await admit(ticket.id, eventId, ticket.showDateId, now, ticket.checkedInAt);
+    revalidatePath(`/admin/events/${eventId}/checkin`);
     return {
-      status: "duplicate" as const,
-      message: `Already scanned at ${new Date((ticket.checkedInAt ?? 0) * 1000).toLocaleTimeString("en-IN")}.`,
-      ticket,
+      status: "in",
+      message: `Admit ${ticket.admitsCount}`,
+      ticket: { ...summary, inside: 1, entryCount: ticket.entryCount + 1 },
     };
   }
 
-  await db
-    .update(tickets)
-    .set({ status: "checked_in", checkedInAt: Math.floor(Date.now() / 1000), checkedInBy: "gate" })
-    .where(eq(tickets.id, ticket.id));
+  const wantsOut = mode === "out" || (mode === "auto" && ticket.inside === 1);
 
+  if (wantsOut) {
+    if (!ticket.inside) {
+      return {
+        status: "duplicate",
+        message: "Already outside",
+        detail: "This pass isn't currently inside the venue.",
+        ticket: summary,
+      };
+    }
+    db.transaction((tx) => {
+      tx.update(tickets)
+        .set({ inside: 0, lastScanAt: now })
+        .where(eq(tickets.id, ticket.id))
+        .run();
+      tx.insert(scans)
+        .values({ id: id(), ticketId: ticket.id, eventId, showDateId: ticket.showDateId, direction: "out", at: now, by: "gate" })
+        .run();
+    });
+    revalidatePath(`/admin/events/${eventId}/checkin`);
+    return {
+      status: "out",
+      message: "Checked out",
+      detail: "Scan again on the way back in.",
+      ticket: { ...summary, inside: 0 },
+    };
+  }
+
+  if (ticket.inside) {
+    return {
+      status: "duplicate",
+      message: "Already inside",
+      detail: `Entered at ${stampTime(ticket.lastScanAt ?? ticket.checkedInAt)}.`,
+      ticket: summary,
+    };
+  }
+
+  // A cooldown stops one pass being handed back over the fence immediately.
+  if (event.reentryCooldownMins > 0 && ticket.lastScanAt) {
+    const waited = now - ticket.lastScanAt;
+    const needed = event.reentryCooldownMins * 60;
+    if (waited < needed) {
+      const mins = Math.ceil((needed - waited) / 60);
+      return {
+        status: "cooldown",
+        message: "Too soon to re-enter",
+        detail: `This pass left ${Math.floor(waited / 60)} min ago. Wait ${mins} more min.`,
+        ticket: summary,
+      };
+    }
+  }
+
+  await admit(ticket.id, eventId, ticket.showDateId, now, ticket.checkedInAt);
   revalidatePath(`/admin/events/${eventId}/checkin`);
   return {
-    status: "ok" as const,
-    message: `Admit ${ticket.admitsCount}`,
-    ticket: { ...ticket, status: "checked_in" as const },
+    status: "in",
+    message: ticket.entryCount > 0 ? "Welcome back" : `Admit ${ticket.admitsCount}`,
+    detail: ticket.entryCount > 0 ? `Re-entry #${ticket.entryCount + 1}` : undefined,
+    ticket: { ...summary, inside: 1, entryCount: ticket.entryCount + 1 },
   };
 }
 
-export async function undoCheckIn(ticketId: string, eventId: string) {
+function stampTime(ts: number | null) {
+  return ts ? new Date(ts * 1000).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—";
+}
+
+async function admit(
+  ticketId: string,
+  eventId: string,
+  showDateId: string | null,
+  now: number,
+  firstEntry: number | null,
+) {
+  db.transaction((tx) => {
+    tx.update(tickets)
+      .set({
+        status: "checked_in",
+        inside: 1,
+        checkedInAt: firstEntry ?? now,
+        checkedInBy: "gate",
+        lastScanAt: now,
+        entryCount: sql`${tickets.entryCount} + 1`,
+      })
+      .where(eq(tickets.id, ticketId))
+      .run();
+    tx.insert(scans)
+      .values({ id: id(), ticketId, eventId, showDateId, direction: "in", at: now, by: "gate" })
+      .run();
+  });
+}
+
+/** Reverses the most recent scan — the fix for a mis-scan at a busy gate. */
+export async function undoLastScan(ticketId: string, eventId: string) {
   await ownedEvent(eventId);
-  await db
-    .update(tickets)
-    .set({ status: "valid", checkedInAt: null, checkedInBy: null })
-    .where(eq(tickets.id, ticketId));
+
+  const history = await db
+    .select()
+    .from(scans)
+    .where(eq(scans.ticketId, ticketId))
+    .orderBy(desc(scans.at))
+    .all();
+
+  const last = history[0];
+  const previous = history[1];
+
+  db.transaction((tx) => {
+    if (last) tx.delete(scans).where(eq(scans.id, last.id)).run();
+
+    const nowInside = previous ? (previous.direction === "in" ? 1 : 0) : 0;
+    tx.update(tickets)
+      .set({
+        inside: nowInside,
+        status: previous ? "checked_in" : "valid",
+        checkedInAt: previous ? undefined : null,
+        checkedInBy: previous ? undefined : null,
+        lastScanAt: previous?.at ?? null,
+        entryCount: sql`max(0, ${tickets.entryCount} - ${last?.direction === "in" ? 1 : 0})`,
+      })
+      .where(eq(tickets.id, ticketId))
+      .run();
+  });
+
   revalidatePath(`/admin/events/${eventId}/checkin`);
 }
 

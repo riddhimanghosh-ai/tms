@@ -1,8 +1,8 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { events, tickets } from "@/db/schema";
+import { events, scans, tickets } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
-import { Card, SectionTitle } from "@/components/ui";
+import { Badge, Card, SectionTitle } from "@/components/ui";
 import { Scanner } from "./scanner";
 
 export default async function CheckinPage({
@@ -21,20 +21,21 @@ export default async function CheckinPage({
 
   const counts = await db
     .select({
-      total: sql<number>`count(*)`,
-      inside: sql<number>`sum(case when ${tickets.status} = 'checked_in' then ${tickets.admitsCount} else 0 end)`,
-      expected: sql<number>`sum(${tickets.admitsCount})`,
+      expected: sql<number>`coalesce(sum(${tickets.admitsCount}), 0)`,
+      inside: sql<number>`coalesce(sum(case when ${tickets.inside} = 1 then ${tickets.admitsCount} else 0 end), 0)`,
+      arrived: sql<number>`coalesce(sum(case when ${tickets.entryCount} > 0 then ${tickets.admitsCount} else 0 end), 0)`,
     })
     .from(tickets)
     .where(and(eq(tickets.eventId, id), sql`${tickets.status} != 'cancelled'`))
     .get();
 
   const recent = await db
-    .select()
-    .from(tickets)
-    .where(and(eq(tickets.eventId, id), eq(tickets.status, "checked_in")))
-    .orderBy(desc(tickets.checkedInAt))
-    .limit(12)
+    .select({ scan: scans, ticket: tickets })
+    .from(scans)
+    .innerJoin(tickets, eq(tickets.id, scans.ticketId))
+    .where(eq(scans.eventId, id))
+    .orderBy(desc(scans.at))
+    .limit(15)
     .all();
 
   return (
@@ -43,29 +44,39 @@ export default async function CheckinPage({
         eventId={id}
         inside={Number(counts?.inside ?? 0)}
         expected={Number(counts?.expected ?? 0)}
+        arrived={Number(counts?.arrived ?? 0)}
+        allowReentry={event.allowReentry === 1}
       />
 
       <Card className="p-5">
-        <SectionTitle title="Just scanned" hint="Newest first. Tap to undo a mistake." />
+        <SectionTitle
+          title="Gate activity"
+          hint={event.allowReentry ? "Every entry and exit, newest first." : "Newest first."}
+        />
         {recent.length === 0 ? (
-          <p className="text-sm text-ink-400">Nobody has entered yet.</p>
+          <p className="text-sm text-ink-400">Nobody has scanned yet.</p>
         ) : (
-          <ul className="divide-y divide-ink-800/70 text-sm">
-            {recent.map((t) => (
-              <li key={t.id} className="flex items-center justify-between gap-3 py-2.5">
+          <ul className="divide-y divide-ink-700 text-sm">
+            {recent.map(({ scan, ticket }) => (
+              <li key={scan.id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{t.holderName}</p>
-                  <p className="text-xs text-ink-400">
-                    {t.zoneName}
-                    {t.seatLabel ? ` · ${t.seatLabel}` : ""} · {t.code}
+                  <p className="truncate font-medium">{ticket.holderName}</p>
+                  <p className="truncate text-xs text-ink-400">
+                    {ticket.zoneName}
+                    {ticket.seatLabel ? ` · ${ticket.seatLabel}` : ""} · {ticket.code}
                   </p>
                 </div>
-                <span className="tabular shrink-0 text-xs text-ink-400">
-                  {new Date((t.checkedInAt ?? 0) * 1000).toLocaleTimeString("en-IN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge tone={scan.direction === "in" ? "green" : "neutral"}>
+                    {scan.direction === "in" ? "in" : "out"}
+                  </Badge>
+                  <span className="tabular text-xs text-ink-400">
+                    {new Date(scan.at * 1000).toLocaleTimeString("en-IN", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>

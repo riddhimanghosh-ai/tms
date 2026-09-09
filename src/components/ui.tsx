@@ -12,7 +12,7 @@ export function FormError({ state }: { state: unknown }) {
   const message = actionError(state);
   if (!message) return null;
   return (
-    <p className="rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200">
+    <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
       {message}
     </p>
   );
@@ -31,7 +31,7 @@ export function Card({
     <div
       {...rest}
       className={cn(
-        "rounded-[--radius-card] border border-ink-700/70 bg-ink-900/70 backdrop-blur",
+        "rounded-[--radius-card] border border-ink-700 bg-ink-900 card-shadow",
         className,
       )}
     >
@@ -64,10 +64,10 @@ const buttonBase =
   "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500";
 
 const variants = {
-  primary: "bg-brand-600 text-white hover:bg-brand-500 shadow-sm",
-  secondary: "bg-ink-800 text-ink-50 hover:bg-ink-700 border border-ink-700",
+  primary: "bg-brand-600 text-white hover:bg-brand-500 shadow-sm shadow-brand-600/20",
+  secondary: "bg-white text-ink-100 hover:bg-ink-800 border border-ink-700 shadow-sm",
   ghost: "text-ink-300 hover:text-ink-50 hover:bg-ink-800",
-  danger: "bg-red-950 text-red-200 border border-red-900 hover:bg-red-900",
+  danger: "bg-white text-rose-600 border border-rose-200 hover:bg-rose-50",
   light: "bg-slate-900 text-white hover:bg-slate-800 shadow-sm",
 } as const;
 
@@ -133,7 +133,7 @@ export function Field({
 }
 
 export const inputClass =
-  "w-full rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-sm text-ink-50 placeholder:text-ink-600 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-600/30";
+  "w-full rounded-lg border border-ink-700 bg-white px-3 py-2 text-sm text-ink-50 placeholder:text-ink-500 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-600/20";
 
 export function Input(props: ComponentProps<"input">) {
   return <input {...props} className={cn(inputClass, props.className)} />;
@@ -149,10 +149,10 @@ export function Select(props: ComponentProps<"select">) {
 
 const badgeTones = {
   neutral: "bg-ink-800 text-ink-300 border-ink-700",
-  green: "bg-emerald-950 text-emerald-300 border-emerald-900",
-  amber: "bg-amber-950 text-amber-300 border-amber-900",
-  red: "bg-red-950 text-red-300 border-red-900",
-  brand: "bg-brand-600/15 text-brand-400 border-brand-600/40",
+  green: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  amber: "bg-amber-50 text-amber-700 border-amber-200",
+  red: "bg-rose-50 text-rose-700 border-rose-200",
+  brand: "bg-brand-50 text-brand-700 border-brand-200",
 } as const;
 
 export function Badge({

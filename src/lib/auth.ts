@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { organizers, sessions } from "@/db/schema";
 import { id } from "./ids";
 
-const COOKIE = "gathara_session";
+const COOKIE = "rasana_session";
 const SESSION_DAYS = 30;
 
 export function hashPassword(password: string) {

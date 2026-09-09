@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Wordmark } from "@/components/brand";
 import { useActionState } from "react";
 import { signup } from "../auth-actions";
 import { Button, Field, Input } from "@/components/ui";
@@ -11,11 +12,11 @@ export default function SignupPage() {
   return (
     <main className="grid min-h-dvh place-items-center px-4 py-10">
       <div className="w-full max-w-sm">
-        <Link href="/" className="mb-8 block text-center text-lg font-semibold tracking-tight">
-          <span className="text-brand-500">◆</span> Gathara
-        </Link>
+        <div className="mb-8 flex justify-center">
+          <Wordmark size={30} />
+        </div>
 
-        <form action={action} className="space-y-4 rounded-[--radius-card] border border-ink-700/70 bg-ink-900/70 p-6">
+        <form action={action} className="space-y-4 rounded-[--radius-card] border border-ink-700 bg-ink-900 card-shadow p-6">
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Create your account</h1>
             <p className="mt-1 text-sm text-ink-400">
@@ -37,7 +38,7 @@ export default function SignupPage() {
           </Field>
 
           {state?.error ? (
-            <p className="rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-sm text-red-200">
+            <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {state.error}
             </p>
           ) : null}
@@ -48,7 +49,7 @@ export default function SignupPage() {
 
           <p className="text-center text-xs text-ink-400">
             Already have one?{" "}
-            <Link href="/admin/login" className="text-brand-400 hover:underline">
+            <Link href="/admin/login" className="text-brand-600 hover:underline">
               Sign in
             </Link>
           </p>

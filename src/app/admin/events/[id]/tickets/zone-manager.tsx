@@ -212,7 +212,7 @@ function ZoneSeatMap({
       </p>
       <div
         className={cn(
-          "rounded-xl border border-ink-800 bg-ink-950/60 p-3 transition",
+          "rounded-xl border border-ink-700 bg-ink-850 p-3 transition",
           pending && "opacity-60",
         )}
       >
@@ -375,7 +375,7 @@ function ZoneForm({
         );
 
   return (
-    <Card className="border-brand-600/40 bg-brand-600/[0.04] p-5">
+    <Card className="border-brand-200 bg-brand-50 p-5">
       <SectionTitle
         title={zone ? `Edit ${zone.name}` : seated ? "New seating block" : "New ticket category"}
       />
@@ -431,11 +431,11 @@ function ZoneForm({
                     className={cn(
                       "flex gap-3 rounded-xl border p-3 text-left transition",
                       shape === s.value
-                        ? "border-brand-500 bg-brand-600/10"
+                        ? "border-brand-500 bg-brand-50"
                         : "border-ink-700 bg-ink-900/60 hover:border-ink-600",
                     )}
                   >
-                    <span className="shrink-0 rounded-lg bg-ink-950/70 p-1">
+                    <span className="shrink-0 rounded-lg bg-ink-800 p-1">
                       <ShapePreview
                         shape={s.value}
                         color={color}
@@ -602,14 +602,14 @@ function ZoneForm({
                   <span className="font-medium">{seatTotal.toLocaleString("en-IN")}</span>{" "}
                   <span className="text-ink-400">seats in this block</span>
                   {zone && zone.sold > 0 ? (
-                    <span className="ml-2 text-amber-400">
+                    <span className="ml-2 text-amber-600">
                       · {zone.sold} already sold and will be kept
                     </span>
                   ) : null}
                 </p>
               </div>
 
-              <div className="rounded-xl border border-ink-800 bg-ink-950/60 p-3">
+              <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
                 <p className="mb-1 text-xs uppercase tracking-wide text-ink-400">Live preview</p>
                 <SeatMap
                   zone={{
@@ -649,7 +649,7 @@ function ZoneForm({
         )}
 
         {nightCount > 1 ? (
-          <label className="flex items-start gap-2 rounded-xl border border-ink-800 bg-ink-950/40 p-3 text-sm">
+          <label className="flex items-start gap-2 rounded-xl border border-ink-700 bg-ink-850 p-3 text-sm">
             <input
               type="checkbox"
               name="allDates"

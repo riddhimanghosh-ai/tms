@@ -72,7 +72,7 @@ export default async function AttendeesPage({
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
             <thead>
-              <tr className="border-b border-ink-800 text-left text-xs uppercase tracking-wide text-ink-400">
+              <tr className="border-b border-ink-700 text-left text-xs uppercase tracking-wide text-ink-400">
                 <th className="px-4 py-3 font-medium">Pass code</th>
                 <th className="px-4 py-3 font-medium">Holder</th>
                 <th className="px-4 py-3 font-medium">Category</th>
@@ -80,9 +80,9 @@ export default async function AttendeesPage({
                 <th className="px-4 py-3 font-medium">Entry</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ink-800/70">
+            <tbody className="divide-y divide-ink-700">
               {rows.map(({ ticket, order }) => (
-                <tr key={ticket.id} className="hover:bg-ink-850/50">
+                <tr key={ticket.id} className="hover:bg-ink-800">
                   <td className="px-4 py-3 font-mono text-xs">{ticket.code}</td>
                   <td className="px-4 py-3">
                     <p className="font-medium">{ticket.holderName ?? order.buyerName}</p>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Gathara — ticketing for live events",
+  title: "Rasana — book Garba nights, concerts and utsavs",
   description:
     "Sell tickets on your own site or over WhatsApp, and run the whole event from one dashboard.",
 };

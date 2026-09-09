@@ -14,6 +14,7 @@ import {
   cn,
 } from "@/components/ui";
 import { DateTimeField, DurationField } from "@/components/date-time-field";
+import { HighlightsEditor } from "@/components/highlights-editor";
 import { SeatMap } from "@/components/seat-map";
 import { useActionToast } from "@/components/toast";
 import {
@@ -23,6 +24,7 @@ import {
   type StagePosition,
   type StageShape,
 } from "@/lib/seat-layout";
+import { parseHighlights } from "@/lib/highlights";
 import type { Event } from "@/db/schema";
 
 /** A small stand-in layout so the stage controls have something to sit inside. */
@@ -57,6 +59,7 @@ export function SettingsForm({ event }: { event: Event }) {
   useActionToast(state, { ok: "Settings saved" });
   const [deleting, startDelete] = useTransition();
 
+  const [allowReentry, setAllowReentry] = useState(event.allowReentry === 1);
   const [stageLabel, setStageLabel] = useState(event.stageLabel);
   const [stagePosition, setStagePosition] = useState<StagePosition>(
     event.stagePosition as StagePosition,
@@ -67,6 +70,9 @@ export function SettingsForm({ event }: { event: Event }) {
     <div className="max-w-3xl space-y-6">
       <form action={action} noValidate className="space-y-6">
         <input type="hidden" name="eventId" value={event.id} />
+        <input type="hidden" name="reentrySection" value="1" />
+        <input type="hidden" name="listingSection" value="1" />
+        <input type="hidden" name="highlightsSection" value="1" />
 
         <Card className="space-y-5 p-5">
           <SectionTitle title="Event details" hint="Everything here shows on the public booking page." />
@@ -94,6 +100,32 @@ export function SettingsForm({ event }: { event: Event }) {
             <Input name="address" defaultValue={event.address ?? ""} />
           </Field>
 
+          <div>
+            <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-400">
+              Highlights
+            </span>
+            <p className="mb-3 text-xs text-ink-400">
+              The icon row under the hero — Live Music, Food Stalls, Special Artists.
+            </p>
+            <HighlightsEditor initial={parseHighlights(event.highlights)} />
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-ink-700 bg-ink-850 p-4">
+            <input
+              type="checkbox"
+              name="listPublicly"
+              defaultChecked={event.listPublicly === 1}
+              className="mt-0.5 size-4 accent-[--color-brand-600]"
+            />
+            <span>
+              <span className="font-medium">List on the Rasana marketplace</span>
+              <span className="mt-1 block text-sm text-ink-400">
+                Off, the event still has its own landing page and embed — it just won&apos;t be
+                discoverable by people browsing. Turn it off for private or invite-only events.
+              </span>
+            </span>
+          </label>
+
           <div className="grid gap-5 sm:grid-cols-2">
             <DateTimeField
               name="startsAt"
@@ -112,6 +144,55 @@ export function SettingsForm({ event }: { event: Event }) {
             quickDates={false}
             hint="Optional — shown on the landing page."
           />
+        </Card>
+
+        <Card className="space-y-4 p-5">
+          <SectionTitle
+            title="Gate & re-entry"
+            hint="How a pass behaves when someone steps outside during the event."
+          />
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-ink-700 bg-ink-850 p-4">
+            <input
+              type="checkbox"
+              name="allowReentry"
+              checked={allowReentry}
+              onChange={(e) => setAllowReentry(e.target.checked)}
+              className="mt-0.5 size-4 accent-[--color-brand-600]"
+            />
+            <span className="min-w-0">
+              <span className="font-medium">Allow re-entry</span>
+              <span className="mt-1 block text-sm text-ink-400">
+                The same QR toggles at the gate: scan on the way out, scan again on the way
+                back. Without this a pass scans once and a second scan is rejected as a
+                duplicate — which locks out anyone who steps out for a phone call.
+              </span>
+            </span>
+          </label>
+
+          {allowReentry ? (
+            <Field
+              label="Minimum gap before coming back (minutes)"
+              hint="Stops one pass being handed back over the fence. 0 turns the check off."
+            >
+              <Input
+                name="reentryCooldownMins"
+                type="number"
+                min={0}
+                max={240}
+                defaultValue={event.reentryCooldownMins}
+                className="max-w-32"
+              />
+            </Field>
+          ) : (
+            <input type="hidden" name="reentryCooldownMins" value={0} />
+          )}
+
+          <p className="rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-sm text-ink-400">
+            {allowReentry
+              ? "The gate screen gains Auto / Entry-only / Exit-only lanes, and the live counter shows who is inside versus who has stepped out."
+              : "The gate screen stays single-scan: one entry per pass."}
+          </p>
         </Card>
 
         <Card className="space-y-4 p-5">
@@ -143,7 +224,7 @@ export function SettingsForm({ event }: { event: Event }) {
                     className={cn(
                       "rounded-full border px-2.5 py-1 text-xs transition",
                       stageLabel === preset
-                        ? "border-brand-500 bg-brand-600/15 text-brand-400"
+                        ? "border-brand-500 bg-brand-100 text-brand-700"
                         : "border-ink-700 text-ink-400 hover:border-ink-600 hover:text-ink-100",
                     )}
                   >
@@ -184,7 +265,7 @@ export function SettingsForm({ event }: { event: Event }) {
               </p>
             </div>
 
-            <div className="rounded-xl border border-ink-800 bg-ink-950/60 p-3">
+            <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
               <p className="mb-1 text-xs uppercase tracking-wide text-ink-400">Preview</p>
               <SeatMap
                 zone={PREVIEW_ZONE}
@@ -247,7 +328,7 @@ export function SettingsForm({ event }: { event: Event }) {
         </div>
       </form>
 
-      <Card className="border-red-900/60 p-5">
+      <Card className="border-rose-200 p-5">
         <SectionTitle
           title="Delete this event"
           hint="Removes the event, its nights, tickets, orders and passes. This cannot be undone."

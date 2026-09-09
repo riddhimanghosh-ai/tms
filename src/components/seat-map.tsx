@@ -323,7 +323,7 @@ export function SeatLegend({
             </li>
           ))}
         </ul>
-        <ul className={`flex flex-wrap gap-4 border-t pt-2 text-xs ${muted} ${theme === "dark" ? "border-ink-800" : "border-slate-100"}`}>
+        <ul className={`flex flex-wrap gap-4 border-t pt-2 text-xs ${muted} ${theme === "dark" ? "border-ink-700" : "border-slate-100"}`}>
           {states.map((s) => (
             <li key={s.label} className="flex items-center gap-1.5">
               <span className="size-2.5 rounded-full" style={{ background: s.color }} />

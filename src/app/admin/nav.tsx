@@ -6,6 +6,7 @@ import { cn } from "@/components/ui";
 
 const tabs = [
   { seg: "", label: "Overview" },
+  { seg: "setup", label: "Set up" },
   { seg: "dates", label: "Nights" },
   { seg: "tickets", label: "Tickets & seating" },
   { seg: "codes", label: "Codes" },
@@ -26,7 +27,7 @@ export function EventNav() {
 
   return (
     <nav className="mx-auto max-w-7xl overflow-x-auto px-4">
-      <ul className="flex gap-1 border-t border-ink-800/60 pt-1">
+      <ul className="flex gap-1 border-t border-ink-700 pt-1">
         {tabs.map((t) => {
           const href = `/admin/events/${eventId}${t.seg ? `/${t.seg}` : ""}`;
           const active = seg === t.seg;

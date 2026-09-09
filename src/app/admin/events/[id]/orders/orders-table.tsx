@@ -55,7 +55,7 @@ export function OrdersTable({ rows, eventTitle }: { rows: Row[]; eventTitle: str
     <Card className="overflow-x-auto">
       <table className="w-full min-w-[880px] text-sm">
         <thead>
-          <tr className="border-b border-ink-800 text-left text-xs uppercase tracking-wide text-ink-400">
+          <tr className="border-b border-ink-700 text-left text-xs uppercase tracking-wide text-ink-400">
             <th className="px-4 py-3 font-medium">Order</th>
             <th className="px-4 py-3 font-medium">Buyer</th>
             <th className="px-4 py-3 font-medium">Tickets</th>
@@ -66,15 +66,15 @@ export function OrdersTable({ rows, eventTitle }: { rows: Row[]; eventTitle: str
             <th className="px-4 py-3" />
           </tr>
         </thead>
-        <tbody className="divide-y divide-ink-800/70">
+        <tbody className="divide-y divide-ink-700">
           {rows.map((order) => (
             <Fragment key={order.id}>
               <tr
-                className={cn("cursor-pointer hover:bg-ink-850/50", openId === order.id && "bg-ink-850/60")}
+                className={cn("cursor-pointer hover:bg-ink-800", openId === order.id && "bg-ink-800")}
                 onClick={() => toggle(order)}
               >
                 <td className="px-4 py-3">
-                  <span className="font-mono text-xs text-brand-400">{order.publicId}</span>
+                  <span className="font-mono text-xs text-brand-600">{order.publicId}</span>
                   <p className="mt-0.5 text-xs text-ink-500">
                     {new Date(order.createdAt * 1000).toLocaleString("en-IN", {
                       dateStyle: "medium",
@@ -96,11 +96,11 @@ export function OrdersTable({ rows, eventTitle }: { rows: Row[]; eventTitle: str
                   {order.discountCode ? (
                     <code className="rounded bg-ink-800 px-1.5 py-0.5 text-xs">{order.discountCode}</code>
                   ) : order.referralCode ? (
-                    <code className="rounded bg-brand-600/15 px-1.5 py-0.5 text-xs text-brand-400">
+                    <code className="rounded bg-brand-100 px-1.5 py-0.5 text-xs text-brand-600">
                       {order.referralCode}
                     </code>
                   ) : (
-                    <span className="text-ink-600">—</span>
+                    <span className="text-ink-500">—</span>
                   )}
                 </td>
                 <td className="tabular px-4 py-3 text-right text-ink-300">
@@ -120,7 +120,7 @@ export function OrdersTable({ rows, eventTitle }: { rows: Row[]; eventTitle: str
               </tr>
 
               {openId === order.id ? (
-                <tr className="bg-ink-950/60">
+                <tr className="bg-ink-850">
                   <td colSpan={8} className="px-4 py-4">
                     {loading || !detail ? (
                       <p className="text-sm text-ink-400">Loading passes…</p>
@@ -172,7 +172,7 @@ function OrderDetail({
       <div>
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-400">
           Passes ({detail.passes.length})
-          {checkedIn ? <span className="ml-2 text-emerald-400">{checkedIn} scanned</span> : null}
+          {checkedIn ? <span className="ml-2 text-emerald-600">{checkedIn} scanned</span> : null}
         </p>
         {detail.passes.length === 0 ? (
           <p className="text-sm text-ink-400">
@@ -183,13 +183,13 @@ function OrderDetail({
             {detail.passes.map((p) => (
               <li
                 key={p.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-ink-800 px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-3 rounded-lg border border-ink-700 px-3 py-2 text-sm"
               >
                 <span className="min-w-0">
                   <Link
                     href={`/t/${p.code}`}
                     target="_blank"
-                    className="font-mono text-xs text-brand-400 hover:underline"
+                    className="font-mono text-xs text-brand-600 hover:underline"
                   >
                     {p.code}
                   </Link>
@@ -213,7 +213,7 @@ function OrderDetail({
       </div>
 
       <div className="space-y-3">
-        <dl className="space-y-1 rounded-lg border border-ink-800 p-3 text-sm">
+        <dl className="space-y-1 rounded-lg border border-ink-700 p-3 text-sm">
           {detail.items.map((i) => (
             <div key={i.zoneName} className="flex justify-between gap-3">
               <dt className="text-ink-400">
@@ -222,7 +222,7 @@ function OrderDetail({
               <dd className="tabular">{formatMinor(i.unitPriceMinor * i.qty)}</dd>
             </div>
           ))}
-          <div className="flex justify-between gap-3 border-t border-ink-800 pt-1.5 font-medium">
+          <div className="flex justify-between gap-3 border-t border-ink-700 pt-1.5 font-medium">
             <dt>Paid</dt>
             <dd className="tabular">{formatMinor(order.totalMinor)}</dd>
           </div>

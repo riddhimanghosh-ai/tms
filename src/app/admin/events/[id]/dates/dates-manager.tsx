@@ -202,7 +202,7 @@ function RunForm({
   if (state && "ok" in state && state.ok) queueMicrotask(onDone);
 
   return (
-    <Card className="border-brand-600/40 bg-brand-600/[0.04] p-5">
+    <Card className="border-brand-200 bg-brand-50 p-5">
       <SectionTitle
         title="Add a run of nights"
         hint="Creates consecutive nights at the same time each day — nine taps become one."
@@ -238,7 +238,7 @@ function SingleForm({ eventId, onDone }: { eventId: string; onDone: () => void }
   if (state && "ok" in state && state.ok) queueMicrotask(onDone);
 
   return (
-    <Card className="border-brand-600/40 bg-brand-600/[0.04] p-5">
+    <Card className="border-brand-200 bg-brand-50 p-5">
       <SectionTitle title="Add a night" />
       <form action={action} className="space-y-4">
         <input type="hidden" name="eventId" value={eventId} />
@@ -277,7 +277,7 @@ function EditForm({
   if (state && "ok" in state && state.ok) queueMicrotask(onDone);
 
   return (
-    <Card className="border-brand-600/40 bg-brand-600/[0.04] p-5">
+    <Card className="border-brand-200 bg-brand-50 p-5">
       <SectionTitle title={night.label ?? "Edit night"} />
       <form action={action} className="space-y-4">
         <input type="hidden" name="eventId" value={eventId} />

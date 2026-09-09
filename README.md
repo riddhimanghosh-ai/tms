@@ -1,4 +1,4 @@
-# Gathara — ticketing for live events
+# Rasana — ticketing for live events
 
 A white-label ticket booking and event management system built for Indian event
 organisers: Garba and dandiya nights, ground events, and seated shows.
@@ -23,6 +23,7 @@ Open http://localhost:3000
 | Where | What |
 |---|---|
 | `/` | Marketing page for the product itself |
+| `/` | The **Rasana marketplace** — every published event, searchable by city |
 | `/admin/login` | Organiser dashboard — **organiser@demo.in / demo1234** |
 | `/e/rhythm-events/navratri-nights-2026` | Open-ground landing page → priced categories |
 | `/e/rhythm-events/dandiya-finale-live` | Reserved seating, straight rows |
@@ -38,6 +39,15 @@ oversell and seat-clash protection — against the real database.
 ---
 
 ## What's built
+
+### Three ways to sell — the organiser keeps the audience either way
+
+1. **The Rasana marketplace** (`/`) — every published event in one place, with
+   search and a city filter. An organiser can opt out per event and still keep
+   the other two.
+2. **Their own landing page** (`/e/<org>/<event>`) — one link, their branding,
+   no competitors on the page. This is what gets sent over WhatsApp.
+3. **Embedded in their existing site** — a script tag drops the booking form in.
 
 ### The buyer journey
 
@@ -86,9 +96,9 @@ is already doing the selling.
 Three options on the **Embed & share** tab, with a live preview:
 
 ```html
-<div id="gathara-tickets"></div>
+<div id="rasana-tickets"></div>
 <script src="https://…/embed.js" data-event="rhythm-events/navratri-nights-2026"
-        data-target="#gathara-tickets" async></script>
+        data-target="#rasana-tickets" async></script>
 ```
 
 The script injects an iframe and keeps its height in sync with the form, so
@@ -99,7 +109,11 @@ complete landing page, and the dashboard has a one-tap WhatsApp share.
 
 ### Dashboard (the organiser side)
 
-- **Overview** — daily gross sales curve, revenue by ticket type, sell-through
+- **Overview** — a date range you can change (7 / 30 / 90 days / all time),
+  four headline tiles with period-on-period deltas, a daily sales curve, revenue
+  share by ticket type, a **sales-by-source donut**, sell-through per tier,
+  promoter leaderboard and a money breakdown down to commission owed. Daily
+  gross sales curve, revenue by ticket type, sell-through
   per category with a near-sold-out warning, promoter leaderboard, channel
   attribution, a money breakdown down to commission owed, and page→booking
   conversion.
@@ -126,6 +140,16 @@ complete landing page, and the dashboard has a one-tap WhatsApp share.
 - **Orders & attendees** — searchable, filterable, CSV export for both.
 - **Bulk seat editing** — block or unblock a whole row or ring from one chip,
   rather than clicking seats one at a time.
+- **Re-entry** *(optional, per event)* — off, a pass scans once and a second
+  scan is a duplicate, which locks out anyone who steps out for a phone call.
+  On, the same QR toggles: scan on the way out, scan again on the way back. The
+  gate gains Auto / Entry-only / Exit-only lanes, the counter separates *inside*
+  from *stepped out*, and an optional cooldown stops a pass being handed back
+  over the fence. Every movement is logged, and the last scan can be undone.
+- **Guided setup** — a five-step wizard (Details → Venue & layout → Categories →
+  Nights → Publish) with a stepper that marks what's actually done. Nothing in
+  it is one-way: prices, capacity, layout, dates and copy all stay editable
+  after publishing, from the same screens or from Settings.
 - **Check-in** — a gate scanner that reads QR codes with the phone camera
   (`BarcodeDetector`) or accepts a typed code. Duplicate scans are caught and
   labelled, and a live "inside right now" counter tracks arrivals.
@@ -155,6 +179,8 @@ src/
     toast.tsx            action feedback
   components/
     charts.tsx        SVG charts on a CVD-validated categorical palette
+    brand.tsx         the Rasana mark
+    range-picker.tsx  the dashboard's date range, held in the URL
     seat-map.tsx      one SVG renderer for grid, rings and arc layouts
     booking/          the buyer-facing widget, countdown and urgency strip
   app/
@@ -166,6 +192,12 @@ src/
 ```
 
 **Money** is stored as integer paise everywhere; nothing is a float.
+
+**Everything stays editable.** Nothing in setup is a one-way door: price,
+capacity, layout shape, stage position, dates and copy can all be changed after
+an event is live, and the booking page reflects it immediately. `updateEvent`
+patches only the fields a form actually submitted, so the wizard's partial steps
+and the full settings page can share one action without one blanking the other.
 
 **Seat geometry lives in one module.** `seat-layout.ts` turns a block's config
 into positions in a fixed 1000×1000 viewBox. The seat generator, the organiser's

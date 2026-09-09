@@ -5,6 +5,7 @@ import { loadPublicEvent } from "@/lib/public-event";
 import { formatMinor } from "@/lib/money";
 import { Countdown } from "@/components/booking/countdown";
 import { UrgencyStrip, urgencySignals } from "@/components/booking/urgency";
+import { HIGHLIGHT_ICONS, parseHighlights } from "@/lib/highlights";
 import { ViewTracker } from "@/components/booking/view-tracker";
 
 type Props = {
@@ -49,6 +50,24 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
   const multiNight = nights.length > 1;
   const firstNight = upcoming[0] ?? nights[0] ?? null;
   const lastNight = nights[nights.length - 1] ?? null;
+
+  const highlights = parseHighlights(event.highlights);
+  const capacityTotal = zones.reduce((n, z) => n + z.available, 0) + ticketsSold;
+  const filledPct = capacityTotal > 0 ? Math.round((ticketsSold / capacityTotal) * 100) : 0;
+
+  const proof = [
+    {
+      value:
+        ticketsSold >= 1000
+          ? `${(ticketsSold / 1000).toFixed(1)}K+`
+          : ticketsSold.toLocaleString("en-IN"),
+      label: "Passes booked",
+    },
+    multiNight
+      ? { value: String(nights.length), label: "Nights" }
+      : { value: cheapest ? formatMinor(cheapest.priceMinor) : "—", label: "Entry from" },
+    { value: `${filledPct}%`, label: "Of capacity gone" },
+  ];
 
   const facts = [
     {
@@ -137,13 +156,59 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
         </div>
       </header>
 
-      {signals.length ? (
+      {highlights.length ? (
         <div className="border-b border-slate-200 bg-white">
-          <div className="mx-auto max-w-5xl px-5 py-4">
-            <UrgencyStrip signals={signals} />
-          </div>
+          <ul className="mx-auto grid max-w-5xl grid-cols-2 gap-px overflow-hidden px-5 py-5 sm:grid-cols-4">
+            {highlights.map((h) => (
+              <li key={h.label} className="flex flex-col items-center gap-2 px-2 text-center">
+                <span
+                  className="grid size-11 place-items-center rounded-2xl text-xl"
+                  style={{
+                    background: `${organizer.brandColor}14`,
+                    color: organizer.brandColor,
+                  }}
+                  aria-hidden
+                >
+                  {HIGHLIGHT_ICONS[h.icon].glyph}
+                </span>
+                <span className="text-sm font-medium leading-tight text-slate-700">{h.label}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
+
+      <div className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-5xl px-5 py-5">
+          <Link
+            href={bookHref}
+            className="block w-full rounded-2xl px-6 py-4 text-center text-lg font-semibold text-white shadow-lg transition hover:brightness-110 lg:hidden"
+            style={{ background: organizer.brandColor }}
+          >
+            {onSale ? "Book Now" : "Tickets coming soon"}
+          </Link>
+
+          <dl className="mt-5 grid grid-cols-3 gap-4 lg:mt-0">
+            {proof.map((pItem) => (
+              <div key={pItem.label} className="text-center">
+                <dt className="sr-only">{pItem.label}</dt>
+                <dd>
+                  <span className="block text-2xl font-bold tracking-tight text-slate-900">
+                    {pItem.value}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-slate-500">{pItem.label}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          {signals.length ? (
+            <div className="mt-5">
+              <UrgencyStrip signals={signals} />
+            </div>
+          ) : null}
+        </div>
+      </div>
 
       <main className="mx-auto max-w-5xl space-y-12 px-5 py-12">
         <section>
@@ -397,7 +462,7 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
       </div>
 
       <footer className="border-t border-slate-200 px-5 py-6 text-center text-xs text-slate-400">
-        Booking powered by Gathara for {organizer.name}
+        Booking powered by Rasana for {organizer.name}
       </footer>
     </div>
   );

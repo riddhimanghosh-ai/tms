@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getOrganizer } from "@/lib/auth";
 import { logout } from "./auth-actions";
+import { Wordmark } from "@/components/brand";
 import { Toaster } from "@/components/toast";
 import { EventNav } from "./nav";
 
@@ -22,11 +23,9 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 border-b border-ink-800 bg-ink-950/85 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-ink-700 bg-ink-900/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4">
-          <Link href="/admin" className="font-semibold tracking-tight">
-            <span className="text-brand-500">◆</span> Gathara
-          </Link>
+          <Wordmark href="/admin" size={24} />
           <span className="hidden text-sm text-ink-500 sm:inline">/</span>
           <span className="hidden truncate text-sm text-ink-300 sm:inline">
             {organizer.name}

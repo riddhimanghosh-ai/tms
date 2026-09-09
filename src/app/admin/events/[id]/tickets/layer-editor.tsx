@@ -56,7 +56,7 @@ export function LayerEditor({
   if (visible <= 0) return null;
 
   return (
-    <div className="rounded-xl border border-ink-800 bg-ink-950/40 p-3">
+    <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
       {/* Hidden fields keep the server contract stable whether or not it's open. */}
       {Array.from({ length: visible }, (_, i) => (
         <div key={`hidden-${i}`}>

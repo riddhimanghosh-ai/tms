@@ -4,32 +4,39 @@
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", sans-serif;
 
-  --color-ink-950: #0b0a10;
-  --color-ink-900: #131119;
-  --color-ink-850: #191722;
-  --color-ink-800: #201d2b;
-  --color-ink-700: #2c2839;
-  --color-ink-600: #3d3852;
-  --color-ink-400: #7c7594;
-  --color-ink-300: #a49dbb;
-  --color-ink-200: #cdc8dc;
-  --color-ink-50: #f6f4fb;
+  /*
+   * A light surface ramp. `ink-950` is the page, `ink-900` a card, and the
+   * scale climbs to `ink-50` for primary text — the same ordering the dark
+   * build used, so component classes did not have to change meaning.
+   */
+  --color-ink-950: #f6f5fa;
+  --color-ink-900: #ffffff;
+  --color-ink-850: #fbfafe;
+  --color-ink-800: #f2f0f8;
+  --color-ink-700: #e6e3ef;
+  --color-ink-600: #cec9dd;
+  --color-ink-500: #a8a2ba;
+  --color-ink-400: #6f6980;
+  --color-ink-300: #514b60;
+  --color-ink-200: #322d3e;
+  --color-ink-50: #171325;
 
   --color-brand-50: #fff1f4;
+  --color-brand-100: #ffe1e8;
   --color-brand-200: #ffc9d5;
   --color-brand-400: #fb6f8f;
-  --color-brand-500: #ef4066;
+  --color-brand-500: #f43f68;
   --color-brand-600: #e11d48;
   --color-brand-700: #be123c;
 
   --color-gold-400: #f7b955;
   --color-gold-500: #e9a13b;
 
-  --radius-card: 14px;
+  --radius-card: 16px;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -38,17 +45,11 @@ body {
   color: var(--color-ink-50);
 }
 
-/* Light surface used by the public booking pages, which read better bright. */
+/* The buyer-facing pages carry their own light surface, unchanged. */
 .surface-light {
   color-scheme: light;
   background: #fbfaff;
   color: #1a1725;
-}
-
-@keyframes shimmer {
-  100% {
-    transform: translateX(100%);
-  }
 }
 
 .tabular {
@@ -60,9 +61,16 @@ body {
   color: white;
 }
 
-/* Hide number input spinners — quantity is driven by +/- buttons. */
+/* Quantity is driven by +/− buttons, so the spinners are noise. */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+/* A soft elevation the flat borders alone don't give on a light ground. */
+.card-shadow {
+  box-shadow:
+    0 1px 2px rgb(23 19 37 / 0.04),
+    0 8px 24px -12px rgb(23 19 37 / 0.12);
 }

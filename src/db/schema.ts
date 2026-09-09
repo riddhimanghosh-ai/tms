@@ -71,8 +71,23 @@ export const events = sqliteTable(
     bookingFeeFlatMinor: integer("booking_fee_flat_minor").notNull().default(0),
     maxTicketsPerOrder: integer("max_tickets_per_order").notNull().default(10),
     terms: text("terms"),
+    /**
+     * Short selling points shown as an icon row on the landing page, stored as
+     * JSON: [{ "icon": "music", "label": "Live Music" }, …].
+     */
+    highlights: text("highlights"),
+    /** Listed on the public Rasana marketplace as well as its own page. */
+    listPublicly: integer("list_publicly").notNull().default(1),
     /** PIN typed by gate staff to open the scanner without a full login. */
     gatePin: text("gate_pin"),
+    /**
+     * Lets a pass leave and come back. Off, a pass scans once and a second
+     * scan is a duplicate. On, the gate toggles between in and out, so
+     * stepping outside for a smoke or a phone call is not a lockout.
+     */
+    allowReentry: integer("allow_reentry").notNull().default(0),
+    /** Minimum gap between an exit and the next entry, in minutes. 0 = none. */
+    reentryCooldownMins: integer("reentry_cooldown_mins").notNull().default(0),
     /** What the focal point is called on the seat map: STAGE, SCREEN, DHOL… */
     stageLabel: text("stage_label").notNull().default("STAGE"),
     /** auto | top | bottom | left | right | centre */
@@ -382,8 +397,13 @@ export const tickets = sqliteTable(
     holderName: text("holder_name"),
     admitsCount: integer("admits_count").notNull().default(1),
     status: text("status").notNull().default("valid"), // valid | checked_in | cancelled
+    /** 1 while the holder is inside. Toggled by the gate when re-entry is on. */
+    inside: integer("inside").notNull().default(0),
+    /** First entry, kept for arrival curves even after someone steps out. */
     checkedInAt: integer("checked_in_at"),
     checkedInBy: text("checked_in_by"),
+    lastScanAt: integer("last_scan_at"),
+    entryCount: integer("entry_count").notNull().default(0),
     createdAt: integer("created_at").notNull().default(now),
   },
   (t) => [
@@ -392,6 +412,32 @@ export const tickets = sqliteTable(
     index("tickets_order_idx").on(t.orderId),
     index("tickets_seat_idx").on(t.seatId),
     index("tickets_date_idx").on(t.showDateId),
+  ],
+);
+
+/** Every gate movement. The audit trail behind the live "inside" count. */
+export const scans = sqliteTable(
+  "scans",
+  {
+    id: text("id").primaryKey(),
+    ticketId: text("ticket_id")
+      .notNull()
+      .references(() => tickets.id, { onDelete: "cascade" }),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    showDateId: text("show_date_id").references(() => eventDates.id, {
+      onDelete: "set null",
+    }),
+    /** in | out */
+    direction: text("direction").notNull(),
+    at: integer("at").notNull().default(now),
+    by: text("by"),
+  },
+  (t) => [
+    index("scans_ticket_idx").on(t.ticketId),
+    index("scans_event_idx").on(t.eventId),
+    index("scans_at_idx").on(t.at),
   ],
 );
 
@@ -418,5 +464,6 @@ export type Seat = typeof seats.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type Ticket = typeof tickets.$inferSelect;
+export type Scan = typeof scans.$inferSelect;
 export type DiscountCode = typeof discountCodes.$inferSelect;
 export type ReferralCode = typeof referralCodes.$inferSelect;

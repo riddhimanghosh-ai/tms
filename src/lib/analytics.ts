@@ -16,10 +16,13 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 export type EventStats = ReturnType<typeof eventStats>;
 
 /** Everything the event dashboard needs, in one pass over the tables. */
-export function eventStats(eventId: string, windowDays = 21) {
-  const since = nowSec() - windowDays * DAY;
+export function eventStats(eventId: string, windowDays: number | null = 30) {
+  // `null` means all time: reach back past the first order rather than special
+  // -casing every query below.
+  const span = windowDays ?? 3650;
+  const since = nowSec() - span * DAY;
   const event = db.select().from(events).where(eq(events.id, eventId)).get();
-  const prevSince = since - windowDays * DAY;
+  const prevSince = since - span * DAY;
 
   const totals = db
     .select({
@@ -198,6 +201,8 @@ export function eventStats(eventId: string, windowDays = 21) {
     sellThroughPct: totalCapacity ? (totalSold / totalCapacity) * 100 : 0,
     checkedIn: Number(checkedIn?.n ?? 0),
     daysToGo: event ? Math.max(0, Math.ceil((event.startsAt - nowSec()) / DAY)) : 0,
+    windowDays,
+    nowSec: nowSec(),
     views: viewCount,
     conversionPct: viewCount ? (orderCount / viewCount) * 100 : 0,
   };

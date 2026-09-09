@@ -140,7 +140,7 @@ export function DateTimeField({
                 className={cn(
                   "rounded-full border px-2.5 py-1 text-xs transition",
                   date === s.value
-                    ? "border-brand-500 bg-brand-600/15 text-brand-400"
+                    ? "border-brand-500 bg-brand-100 text-brand-700"
                     : "border-ink-700 text-ink-400 hover:border-ink-600 hover:text-ink-100",
                 )}
               >
@@ -156,7 +156,7 @@ export function DateTimeField({
             className={cn(
               "rounded-full border px-2.5 py-1 text-xs transition",
               time === t.value
-                ? "border-brand-500 bg-brand-600/15 text-brand-400"
+                ? "border-brand-500 bg-brand-100 text-brand-700"
                 : "border-ink-700 text-ink-400 hover:border-ink-600 hover:text-ink-100",
             )}
           >
@@ -178,7 +178,7 @@ export function DateTimeField({
       </div>
 
       {error ? (
-        <p className="mt-1.5 text-sm text-red-400">{error}</p>
+        <p className="mt-1.5 text-sm text-rose-600">{error}</p>
       ) : preview ? (
         <p className="mt-1.5 text-sm text-ink-300">{preview}</p>
       ) : hint ? (

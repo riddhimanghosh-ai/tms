@@ -214,7 +214,7 @@ export function CodesManager({
                 </div>
               </div>
 
-              <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-ink-800 pt-3 sm:grid-cols-4">
+              <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-ink-700 pt-3 sm:grid-cols-4">
                 {[
                   ["Link clicks", r.clicks.toLocaleString("en-IN")],
                   ["Tickets", r.tickets.toLocaleString("en-IN")],
@@ -291,7 +291,7 @@ function DiscountForm({
   if (state && "ok" in state && state.ok) queueMicrotask(onDone);
 
   return (
-    <Card className="border-brand-600/40 bg-brand-600/[0.04] p-5">
+    <Card className="border-brand-200 bg-brand-50 p-5">
       <SectionTitle
         title={code ? `Edit ${code.code}` : "New discount code"}
         hint="Percentage, flat amount, group deal, or a hidden 100% pass for guests."
@@ -439,7 +439,7 @@ function ReferralForm({
   if (state && "ok" in state && state.ok) queueMicrotask(onDone);
 
   return (
-    <Card className="border-brand-600/40 bg-brand-600/[0.04] p-5">
+    <Card className="border-brand-200 bg-brand-50 p-5">
       <SectionTitle
         title={code ? `Edit ${code.code}` : "New referral code"}
         hint="Each promoter gets a code and a shareable link. Attribution and commission are tracked automatically."

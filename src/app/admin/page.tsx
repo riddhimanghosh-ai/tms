@@ -75,7 +75,7 @@ export default async function AdminHome() {
               return (
                 <li key={event.id}>
                   <Link href={`/admin/events/${event.id}`} className="block">
-                    <Card className="p-4 transition hover:border-ink-600 hover:bg-ink-850/70">
+                    <Card className="p-4 transition hover:border-ink-600 hover:bg-ink-800">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate font-medium">{event.title}</p>

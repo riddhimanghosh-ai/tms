@@ -135,7 +135,7 @@ export default function NewEventPage() {
                   className={cn(
                     "group relative cursor-pointer rounded-[--radius-card] border p-4 transition",
                     active
-                      ? "border-brand-500 bg-brand-600/10"
+                      ? "border-brand-500 bg-brand-50"
                       : "border-ink-700 bg-ink-900/60 hover:border-ink-600",
                   )}
                 >
@@ -152,7 +152,7 @@ export default function NewEventPage() {
                     <span
                       className={cn(
                         "shrink-0 rounded-xl p-1.5 transition",
-                        active ? "bg-brand-600/15" : "bg-ink-950/60",
+                        active ? "bg-brand-100" : "bg-ink-850",
                       )}
                     >
                       <ShapePreview
@@ -182,7 +182,7 @@ export default function NewEventPage() {
             })}
           </div>
 
-          <p className="mt-3 rounded-lg border border-ink-800 bg-ink-900/60 px-3 py-2 text-sm text-ink-400">
+          <p className="mt-3 rounded-lg border border-ink-700 bg-ink-900/60 px-3 py-2 text-sm text-ink-400">
             {layout === "open"
               ? "Buyers will choose a category and a quantity. Nobody picks a seat."
               : "Buyers will tap an exact seat on a map you control, seat by seat."}

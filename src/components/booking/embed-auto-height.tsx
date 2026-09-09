@@ -12,7 +12,7 @@ export function EmbedAutoHeight() {
 
     const post = () =>
       window.parent.postMessage(
-        { type: "gathara:height", height: document.documentElement.scrollHeight },
+        { type: "rasana:height", height: document.documentElement.scrollHeight },
         "*",
       );
 
