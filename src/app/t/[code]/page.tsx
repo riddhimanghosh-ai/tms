@@ -4,7 +4,7 @@ import { db, first } from "@/db";
 import { events, orders, organizers, tickets } from "@/db/schema";
 import { qrSvg } from "@/lib/qr";
 import { TicketCard } from "@/components/booking/ticket-card";
-import { BackButton } from "@/components/nav";
+import { BuyerNav } from "@/components/booking/buyer-nav";
 
 /** A single pass, for forwarding one ticket to one friend. */
 export default async function TicketPage({
@@ -27,13 +27,19 @@ export default async function TicketPage({
   const qr = await qrSvg(row.ticket.code);
 
   return (
-    <div className="surface-light grid min-h-dvh place-items-center px-4 py-10">
-      <div className="w-full max-w-md space-y-4">
-        <BackButton
-          href={`/order/${row.order.publicId}`}
-          label="All passes in this booking"
-          tone="light"
-        />
+    <div className="surface-light min-h-dvh">
+      <BuyerNav
+        backHref={`/order/${row.order.publicId}`}
+        backLabel="All passes"
+        crumbs={[
+          { label: "Events", href: "/" },
+          { label: row.event.title, href: `/e/${row.organizer.slug}/${row.event.slug}` },
+          { label: `Order ${row.order.publicId}`, href: `/order/${row.order.publicId}` },
+          { label: `Pass ${row.ticket.code}` },
+        ]}
+      />
+
+      <div className="mx-auto w-full max-w-md space-y-4 px-4 py-8">
         <TicketCard
           code={row.ticket.code}
           qr={qr}

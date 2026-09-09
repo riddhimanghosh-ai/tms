@@ -43,6 +43,7 @@ export default async function PayPage({
       }}
       eventTitle={row.event.title}
       backHref={`/e/${row.organizer.slug}/${row.event.slug}/book`}
+      eventHref={`/e/${row.organizer.slug}/${row.event.slug}`}
       brandColor={row.organizer.brandColor}
       razorpayKey={process.env.RAZORPAY_KEY_ID ?? ""}
       items={items.map((i) => ({ name: i.zoneName, qty: i.qty, unitPriceMinor: i.unitPriceMinor }))}

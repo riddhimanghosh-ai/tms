@@ -57,7 +57,10 @@ try {
   // ---------- seat map on the ringed event ----------
   await page.goto(`${BASE}/e/rhythm-events/raas-in-the-round/book`, { waitUntil: "networkidle" });
   const seatCircles = await page.locator('svg[aria-label*="Seat map"] circle').count();
-  seatCircles > 200 ? ok("ring seat map renders", `${seatCircles} circles`) : bad("ring seat map", `${seatCircles}`);
+  const blockTabs = await page.locator('button[aria-pressed]').count();
+  seatCircles > 60 && blockTabs >= 3
+    ? ok("ring seat map + block tabs", `${seatCircles} circles, ${blockTabs} blocks`)
+    : bad("ring seat map", `circles=${seatCircles} tabs=${blockTabs}`);
   await page.screenshot({ path: "/tmp/shot-seatmap.png" });
 
   // ---------- full purchase on the nine-night event ----------

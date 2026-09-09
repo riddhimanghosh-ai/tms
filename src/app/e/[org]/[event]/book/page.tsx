@@ -3,13 +3,13 @@ import { notFound } from "next/navigation";
 import { loadPublicEvent } from "@/lib/public-event";
 import { formatMinor } from "@/lib/money";
 import { BookingWidget } from "@/components/booking/booking-widget";
-import { BackButton } from "@/components/nav";
+import { BuyerNav } from "@/components/booking/buyer-nav";
 import { Countdown } from "@/components/booking/countdown";
 import { UrgencyStrip, urgencySignals } from "@/components/booking/urgency";
 
 type Props = {
   params: Promise<{ org: string; event: string }>;
-  searchParams: Promise<{ ref?: string; code?: string }>;
+  searchParams: Promise<{ ref?: string; code?: string; zone?: string }>;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function BookPage({ params, searchParams }: Props) {
   const { org, event: eventSlug } = await params;
-  const { ref, code } = await searchParams;
+  const { ref, code, zone } = await searchParams;
   const data = await loadPublicEvent(org, eventSlug);
   if (!data) notFound();
 
@@ -35,16 +35,15 @@ export default async function BookPage({ params, searchParams }: Props) {
 
   return (
     <div className="surface-light min-h-dvh">
-      <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-5 py-3">
-          <BackButton
-            href={`/e/${org}/${eventSlug}`}
-            label="Event details"
-            tone="light"
-          />
-          <p className="ml-auto truncate text-sm font-medium text-slate-900">{event.title}</p>
-        </div>
-      </nav>
+      <BuyerNav
+        backHref={`/e/${org}/${eventSlug}`}
+        backLabel="Event details"
+        crumbs={[
+          { label: "Events", href: "/" },
+          { label: event.title, href: `/e/${org}/${eventSlug}` },
+          { label: "Book" },
+        ]}
+      />
 
       <main className="mx-auto grid max-w-5xl gap-8 px-5 py-8 lg:grid-cols-[340px_1fr] lg:items-start">
         {/* Context rail — keeps the buyer oriented while they pick. */}
@@ -130,6 +129,7 @@ export default async function BookPage({ params, searchParams }: Props) {
             seats={seats}
             nights={nights}
             initialNightId={selectedNightId}
+            initialZoneId={zone ?? null}
             stage={{
               label: event.stageLabel,
               position: event.stagePosition as "auto",

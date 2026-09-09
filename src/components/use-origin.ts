@@ -1,17 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+
+// The origin never changes for the life of the page, so there is nothing to
+// subscribe to; the unsubscribe is a no-op.
+const subscribe = () => () => {};
+const clientOrigin = () => window.location.origin;
+const serverOrigin = () => "";
 
 /**
- * The page's own origin, read after mount.
+ * The page's own origin, empty until hydration completes.
  *
  * Reading `window.location.origin` during render makes the server and client
- * produce different HTML, and React reports that as a hydration mismatch —
- * which, when it throws, leaves the page's interactivity unwired. Returning an
- * empty string on the first pass keeps both renders identical.
+ * emit different HTML, which React reports as a hydration mismatch — and when
+ * that throws, the page's interactivity never wires up. `useSyncExternalStore`
+ * is the sanctioned way to read a browser value with a distinct server
+ * snapshot, so the first render matches on both sides by construction.
  */
 export function useOrigin() {
-  const [origin, setOrigin] = useState("");
-  useEffect(() => setOrigin(window.location.origin), []);
-  return origin;
+  return useSyncExternalStore(subscribe, clientOrigin, serverOrigin);
 }

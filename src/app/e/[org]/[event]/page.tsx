@@ -7,6 +7,7 @@ import { Countdown } from "@/components/booking/countdown";
 import { UrgencyStrip, urgencySignals } from "@/components/booking/urgency";
 import { HIGHLIGHT_ICONS, parseHighlights } from "@/lib/highlights";
 import { ViewTracker } from "@/components/booking/view-tracker";
+import { BuyerNav } from "@/components/booking/buyer-nav";
 
 type Props = {
   params: Promise<{ org: string; event: string }>;
@@ -38,6 +39,13 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
   if (ref) query.set("ref", ref);
   if (code) query.set("code", code);
   const bookHref = `/e/${org}/${eventSlug}/book${query.size ? `?${query}` : ""}`;
+  // "Book" on a tier opens that tier: its seat map on a reserved-seating
+  // event, or one ticket of that category already in the cart on open ground.
+  const bookZoneHref = (zoneId: string) => {
+    const q = new URLSearchParams(query);
+    q.set("zone", zoneId);
+    return `/e/${org}/${eventSlug}/book?${q}`;
+  };
 
   const signals = urgencySignals({
     zones,
@@ -93,25 +101,24 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
     <div className="surface-light min-h-dvh pb-24 lg:pb-0">
       <ViewTracker eventId={event.id} source="web" referral={ref ?? null} />
 
-      {/* Slim bar so the CTA is reachable from anywhere on the page. */}
-      <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-5 py-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-900">{event.title}</p>
-            <p className="truncate text-xs text-slate-500">
-              {start.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-              {event.venue ? ` · ${event.venue}` : ""}
-            </p>
-          </div>
+      <BuyerNav
+        backHref="/"
+        backLabel="All events"
+        crumbs={[
+          { label: "Events", href: "/" },
+          ...(event.city ? [{ label: event.city, href: `/?city=${encodeURIComponent(event.city)}` }] : []),
+          { label: event.title },
+        ]}
+        action={
           <Link
             href={bookHref}
-            className="ml-auto hidden shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white sm:inline-block"
+            className="hidden shrink-0 rounded-lg px-4 py-2 text-sm font-semibold text-white sm:inline-block"
             style={{ background: organizer.brandColor }}
           >
             {onSale ? "Book tickets" : "Notify me"}
           </Link>
-        </div>
-      </nav>
+        }
+      />
 
       <header
         className="relative"
@@ -302,10 +309,12 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
         <section id="tickets">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Passes</h2>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+                {event.layoutType === "seated" ? "Seating & prices" : "Passes"}
+              </h2>
               <p className="mt-1 text-slate-500">
                 {event.layoutType === "seated"
-                  ? "Pick your exact seat at the next step."
+                  ? "Pick a block to open its seat map and choose your exact seats."
                   : multiNight
                   ? "Pick your night, then your category."
                   : "Choose a category and how many you need."}
@@ -374,10 +383,10 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
                     )}
                     {!z.soldOut ? (
                       <Link
-                        href={bookHref}
+                        href={bookZoneHref(z.id)}
                         className="rounded-lg border border-slate-300 px-3.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                       >
-                        Book
+                        {event.layoutType === "seated" ? "Choose seats" : "Book"}
                       </Link>
                     ) : null}
                   </div>

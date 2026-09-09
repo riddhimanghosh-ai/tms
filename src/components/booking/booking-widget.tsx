@@ -51,6 +51,7 @@ export function BookingWidget({
   seats,
   nights,
   initialNightId,
+  initialZoneId,
   brandColor,
   initialCode,
   channel,
@@ -69,6 +70,8 @@ export function BookingWidget({
   seats: PublicSeat[];
   nights: PublicNight[];
   initialNightId: string | null;
+  /** A tier the buyer clicked on the landing page. */
+  initialZoneId?: string | null;
   brandColor: string;
   initialCode?: string | null;
   channel: string;
@@ -79,7 +82,13 @@ export function BookingWidget({
   const multiNight = nights.length > 1;
 
   const [nightId, setNightId] = useState<string | null>(initialNightId);
-  const [qty, setQty] = useState<Record<string, number>>({});
+  // Arriving from a tier's "Book" button starts that category at one ticket,
+  // so an open-ground buyer lands on a priced cart rather than an empty one.
+  const [qty, setQty] = useState<Record<string, number>>(() =>
+    !seated && initialZoneId && zones.some((z) => z.id === initialZoneId && !z.soldOut)
+      ? { [initialZoneId]: 1 }
+      : {},
+  );
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [code, setCode] = useState(initialCode ?? "");
   const [appliedCode, setAppliedCode] = useState<string | null>(initialCode ?? null);
@@ -222,6 +231,7 @@ export function BookingWidget({
                 selected={selectedSeats}
                 max={event.maxTicketsPerOrder}
                 stage={stage}
+                initialZoneId={initialZoneId}
                 onChange={setSelectedSeats}
               />
             ) : (

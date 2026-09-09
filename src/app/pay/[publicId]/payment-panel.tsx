@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { abandonPayment, completePayment } from "@/app/e/actions";
-import { BackButton } from "@/components/nav";
+import { BuyerNav } from "@/components/booking/buyer-nav";
 import { formatMinor } from "@/lib/money";
 
 type Props = {
@@ -23,10 +23,11 @@ type Props = {
   brandColor: string;
   razorpayKey: string;
   backHref: string;
+  eventHref: string;
 };
 
 export function PaymentPanel(props: Props) {
-  const { publicId, provider, order, items, eventTitle, brandColor, backHref } = props;
+  const { publicId, provider, order, items, eventTitle, brandColor, backHref, eventHref } = props;
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,16 +52,37 @@ export function PaymentPanel(props: Props) {
   }
 
   return (
-    <div className="surface-light grid min-h-dvh place-items-center px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-3">
-          <BackButton
-            href={backHref}
-            label="Back to passes"
-            tone="light"
-            onBack={() => void abandonPayment(publicId)}
-          />
-        </div>
+    <div className="surface-light min-h-dvh">
+      <BuyerNav
+        backHref={backHref}
+        backLabel="Change passes"
+        crumbs={[
+          { label: "Events", href: "/" },
+          { label: eventTitle, href: eventHref },
+          { label: "Book", href: backHref },
+          { label: "Payment" },
+        ]}
+      />
+
+      <div className="mx-auto w-full max-w-md px-4 py-8">
+        {/* A three-step trail so nobody wonders how far along they are. */}
+        <ol className="mb-5 flex items-center gap-2 text-xs">
+          {["Passes", "Details", "Payment"].map((step, i) => (
+            <li key={step} className="flex flex-1 items-center gap-2">
+              <span
+                className={`grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${
+                  i < 2 ? "bg-emerald-100 text-emerald-700" : "text-white"
+                }`}
+                style={i === 2 ? { background: brandColor } : undefined}
+              >
+                {i < 2 ? "✓" : "3"}
+              </span>
+              <span className={i === 2 ? "font-medium text-slate-900" : "text-slate-500"}>{step}</span>
+              {i < 2 ? <span className="h-px flex-1 bg-emerald-200" /> : null}
+            </li>
+          ))}
+        </ol>
+
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-5 py-4">
             <p className="text-sm text-slate-500">Paying for</p>

@@ -63,6 +63,16 @@ export function ringTotalSeats(cfg: RingConfig) {
 export type SeatPoint = { x: number; y: number; angleDeg: number; r: number };
 
 /**
+ * Coordinates are rounded before they reach the DOM.
+ *
+ * Math.cos and Math.sin are not required to be correctly rounded, and Node and
+ * the browser disagree in the last bit — enough to render cx="690.3527489594744"
+ * on the server and 690.3527489594745 on the client, which React reports as a
+ * hydration mismatch. Two decimals in a 1000-unit viewBox is far below a pixel.
+ */
+const px = (n: number) => Math.round(n * 100) / 100;
+
+/**
  * Where one ring seat sits. A full 360° sweep spaces seats evenly with no
  * duplicate at the seam; a partial arc includes both endpoints.
  */
@@ -89,10 +99,10 @@ export function ringSeatPoint(
   // −90° so 0° points up, which is where a stage or centre marker reads best.
   const rad = ((angleDeg - 90) * Math.PI) / 180;
   return {
-    x: CENTRE + radius * Math.cos(rad),
-    y: CENTRE + radius * Math.sin(rad),
+    x: px(CENTRE + radius * Math.cos(rad)),
+    y: px(CENTRE + radius * Math.sin(rad)),
     angleDeg,
-    r: seatRadius(cfg, radius, ringSize),
+    r: px(seatRadius(cfg, radius, ringSize)),
   };
 }
 
@@ -125,10 +135,10 @@ export function gridSeatPoint(rows: number, cols: number, row: number, col: numb
   const stepY = rows > 1 ? usableH / (rows - 1) : 0;
   const size = Math.max(6, Math.min(22, usableW / Math.max(cols, 1) / 2.4, usableH / Math.max(rows, 1) / 2.4));
   return {
-    x: pad + (cols > 1 ? col * stepX : usableW / 2),
-    y: pad + (rows > 1 ? row * stepY : usableH / 2),
+    x: px(pad + (cols > 1 ? col * stepX : usableW / 2)),
+    y: px(pad + (rows > 1 ? row * stepY : usableH / 2)),
     angleDeg: 0,
-    r: size,
+    r: px(size),
   };
 }
 

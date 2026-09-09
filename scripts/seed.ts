@@ -29,6 +29,18 @@ import { ringSeatLabel, ringRowLabel, ringSizes } from "../src/lib/seat-layout";
 const DAY = 86400;
 const now = Math.floor(Date.now() / 1000);
 
+/**
+ * Events start in the evening. Anchoring to `now + N days` inherited whatever
+ * time the seed happened to run at, which showed up as "doors 07:21 am" on a
+ * Garba night.
+ */
+function eveningIn(days: number, hour = 19, minute = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(hour, minute, 0, 0);
+  return Math.floor(d.getTime() / 1000);
+}
+
 /** Postgres caps a statement at 65535 parameters; 400 rows stays well clear. */
 async function insertMany<T extends Record<string, unknown>>(
   table: Parameters<typeof db.insert>[0],
@@ -78,9 +90,9 @@ async function main() {
     venue: "Sardar Patel Ground",
     city: "Ahmedabad",
     address: "Sardar Patel Ground, S.G. Highway, Ahmedabad, Gujarat",
-    startsAt: now + 21 * DAY,
-    endsAt: now + 30 * DAY,
-    doorsOpenAt: now + 21 * DAY - 3600,
+    startsAt: eveningIn(21),
+    endsAt: eveningIn(29, 23, 30),
+    doorsOpenAt: eveningIn(21, 18, 0),
     layoutType: "open",
     status: "published",
     bookingFeeBps: 250,
@@ -110,7 +122,7 @@ async function main() {
     nightRows.push({
       id: nid,
       eventId: garbaId,
-      startsAt: now + (21 + n) * DAY,
+      startsAt: eveningIn(21 + n),
       label: n === 8 ? "Night 9 — Finale" : `Night ${n + 1}`,
       note: n === 0 ? "Opening night — live orchestra from 8 pm" : null,
       sortOrder: n,
@@ -145,7 +157,8 @@ async function main() {
     description: "The closing night moves indoors. Every seat reserved.",
     venue: "Tagore Hall",
     city: "Ahmedabad",
-    startsAt: now + 34 * DAY,
+    startsAt: eveningIn(34, 19, 30),
+    doorsOpenAt: eveningIn(34, 18, 30),
     layoutType: "seated",
     status: "published",
     bookingFeeBps: 300,
@@ -161,7 +174,7 @@ async function main() {
     stageShape: "curve",
   });
   const concertNightId = id();
-  nightRows.push({ id: concertNightId, eventId: concertId, startsAt: now + 34 * DAY, sortOrder: 0 });
+  nightRows.push({ id: concertNightId, eventId: concertId, startsAt: eveningIn(34, 19, 30), sortOrder: 0 });
 
   const concertZoneIds: string[] = [];
   [
@@ -200,7 +213,8 @@ async function main() {
     venue: "Riverfront Arena",
     city: "Ahmedabad",
     address: "Sabarmati Riverfront, Ahmedabad, Gujarat",
-    startsAt: now + 27 * DAY,
+    startsAt: eveningIn(27, 20, 0),
+    doorsOpenAt: eveningIn(27, 19, 0),
     layoutType: "seated",
     status: "published",
     bookingFeeBps: 200,
@@ -223,7 +237,7 @@ async function main() {
   for (let n = 0; n < 3; n++) {
     const nid = id();
     akhadaNightIds.push(nid);
-    nightRows.push({ id: nid, eventId: akhadaId, startsAt: now + (27 + n) * DAY, label: `Night ${n + 1}`, sortOrder: n });
+    nightRows.push({ id: nid, eventId: akhadaId, startsAt: eveningIn(27 + n, 20, 0), label: `Night ${n + 1}`, sortOrder: n });
   }
 
   const akhadaZoneIds: string[] = [];

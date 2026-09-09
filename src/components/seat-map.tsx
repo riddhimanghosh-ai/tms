@@ -115,7 +115,7 @@ export function SeatMap({
       .sort(([a], [b]) => a - b)
       .map(([ringIndex, size]) => {
         const p = ringSeatPoint(zone, ringIndex, 0, size);
-        return { ringIndex, radius: Math.hypot(p.x - CENTRE, p.y - CENTRE) };
+        return { ringIndex, radius: Math.round(Math.hypot(p.x - CENTRE, p.y - CENTRE) * 100) / 100 };
       });
   }, [placed, zone, isRing]);
 

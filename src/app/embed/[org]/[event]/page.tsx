@@ -13,10 +13,10 @@ export default async function EmbedPage({
   searchParams,
 }: {
   params: Promise<{ org: string; event: string }>;
-  searchParams: Promise<{ ref?: string; code?: string }>;
+  searchParams: Promise<{ ref?: string; code?: string; zone?: string }>;
 }) {
   const { org, event: eventSlug } = await params;
-  const { ref, code } = await searchParams;
+  const { ref, code, zone } = await searchParams;
   const data = await loadPublicEvent(org, eventSlug);
   if (!data) notFound();
 
@@ -52,6 +52,7 @@ export default async function EmbedPage({
           seats={seats}
           nights={nights}
           initialNightId={selectedNightId}
+          initialZoneId={zone ?? null}
           stage={{
             label: event.stageLabel,
             position: event.stagePosition as "auto",

@@ -6,7 +6,7 @@ import { events, orders, organizers, tickets } from "@/db/schema";
 import { formatMinor } from "@/lib/money";
 import { qrSvg } from "@/lib/qr";
 import { TicketCard } from "@/components/booking/ticket-card";
-import { BackButton } from "@/components/nav";
+import { BuyerNav } from "@/components/booking/buyer-nav";
 
 export default async function OrderPage({
   params,
@@ -37,18 +37,26 @@ export default async function OrderPage({
   const whatsappText = `My passes for ${event.title} — order ${order.publicId}. View them here:`;
 
   return (
-    <div className="surface-light min-h-dvh px-4 py-10">
-      <div className="mx-auto max-w-2xl space-y-6">
-        <div className="flex items-center justify-between gap-3">
-          <BackButton href={`/e/${organizer.slug}/${event.slug}`} label="Event page" tone="light" />
+    <div className="surface-light min-h-dvh">
+      <BuyerNav
+        backHref={`/e/${organizer.slug}/${event.slug}`}
+        backLabel="Event page"
+        crumbs={[
+          { label: "Events", href: "/" },
+          { label: event.title, href: `/e/${organizer.slug}/${event.slug}` },
+          { label: `Order ${order.publicId}` },
+        ]}
+        action={
           <Link
             href={`/e/${organizer.slug}/${event.slug}/book`}
-            className="text-sm font-medium underline"
-            style={{ color: organizer.brandColor }}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            Book more passes
+            Book more
           </Link>
-        </div>
+        }
+      />
+
+      <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
 
         {order.status === "paid" ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
