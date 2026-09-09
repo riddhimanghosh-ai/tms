@@ -1,9 +1,0 @@
-# pnpm blocks postinstall scripts unless a package is listed here. The
-# placeholder values pnpm writes when prompting are not valid in CI, which is
-# what failed the first Vercel build.
-onlyBuiltDependencies:
-  - esbuild
-
-ignoredBuiltDependencies:
-  - sharp
-  - unrs-resolver
