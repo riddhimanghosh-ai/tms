@@ -3,6 +3,8 @@
 A white-label ticket booking and event management system built for Indian event
 organisers: Garba and dandiya nights, ground events, and seated shows.
 
+**Repository:** https://github.com/riddhimanghosh-ai/tms
+
 The organiser gets a full back office. Their buyers get a booking page that
 lives on the organiser's own site (or a link they can WhatsApp) and never shows
 a competitor's event.
