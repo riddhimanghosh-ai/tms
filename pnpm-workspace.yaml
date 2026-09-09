@@ -1,0 +1,8 @@
+# pnpm 11 reads settings here, and names this one `allowBuilds` — a map of
+# package to boolean, not the `onlyBuiltDependencies` list older versions used.
+# An unanswered entry (or a missing one) makes the install exit 1, which is
+# what failed the first Vercel builds.
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+  sharp: false

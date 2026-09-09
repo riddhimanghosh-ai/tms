@@ -41,11 +41,5 @@
     "tsx": "^4.23.13",
     "typescript": "^5"
   },
-  "packageManager": "pnpm@11.4.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "unrs-resolver"
-    ]
-  }
+  "packageManager": "pnpm@11.4.0"
 }
