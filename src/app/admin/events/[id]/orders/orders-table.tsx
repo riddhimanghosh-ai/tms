@@ -7,6 +7,7 @@ import { Badge, Button, Card, cn } from "@/components/ui";
 import { toast } from "@/components/toast";
 import { formatMinor } from "@/lib/money";
 import { useOrigin } from "@/components/use-origin";
+import { dateTime } from "@/lib/datetime";
 
 type Row = {
   id: string;
@@ -77,10 +78,7 @@ export function OrdersTable({ rows, eventTitle }: { rows: Row[]; eventTitle: str
                 <td className="px-4 py-3">
                   <span className="font-mono text-xs text-brand-600">{order.publicId}</span>
                   <p className="mt-0.5 text-xs text-ink-500">
-                    {new Date(order.createdAt * 1000).toLocaleString("en-IN", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
+                    {dateTime(order.createdAt)}
                   </p>
                 </td>
                 <td className="px-4 py-3">

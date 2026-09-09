@@ -1,4 +1,5 @@
 "use client";
+import { EVENT_TZ } from "@/lib/datetime";
 
 export type PublicNight = {
   id: string;
@@ -66,12 +67,12 @@ export function NightPicker({
                 style={active ? { background: brandColor } : undefined}
               >
                 <span className="block text-[11px] uppercase tracking-wide opacity-70">
-                  {date.toLocaleDateString("en-IN", { weekday: "short" })}
+                  {date.toLocaleDateString("en-IN", { timeZone: EVENT_TZ, weekday: "short" })}
                 </span>
                 <span className="block text-lg font-semibold leading-tight">
-                  {date.toLocaleDateString("en-IN", { day: "numeric" })}{" "}
+                  {date.toLocaleDateString("en-IN", { timeZone: EVENT_TZ, day: "numeric" })}{" "}
                   <span className="text-sm font-normal">
-                    {date.toLocaleDateString("en-IN", { month: "short" })}
+                    {date.toLocaleDateString("en-IN", { timeZone: EVENT_TZ, month: "short" })}
                   </span>
                 </span>
                 <span className="mt-0.5 block truncate text-[11px] opacity-80">

@@ -14,6 +14,7 @@ import {
 import { holdInventory, releaseCart } from "./inventory";
 import { id, orderPublicId, ticketCode } from "./ids";
 import { quoteCart, type CartLine } from "./pricing";
+import { shortDate } from "@/lib/datetime";
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -214,9 +215,5 @@ export async function failOrder(orderId: string, reason = "cancelled") {
 /** "Night 3 — Finale", or the date itself when no label was given. */
 export function nightLabel(night: { label: string | null; startsAt: number }) {
   if (night.label) return night.label;
-  return new Date(night.startsAt * 1000).toLocaleDateString("en-IN", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+  return shortDate(night.startsAt);
 }

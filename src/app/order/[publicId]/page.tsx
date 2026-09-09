@@ -7,6 +7,7 @@ import { formatMinor } from "@/lib/money";
 import { qrSvg } from "@/lib/qr";
 import { TicketCard } from "@/components/booking/ticket-card";
 import { BuyerNav } from "@/components/booking/buyer-nav";
+import { EVENT_TZ } from "@/lib/datetime";
 
 export default async function OrderPage({
   params,
@@ -87,14 +88,14 @@ export default async function OrderPage({
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
           <h2 className="font-semibold text-slate-900">{event.title}</h2>
           <p className="mt-1 text-sm text-slate-600">
-            {start.toLocaleDateString("en-IN", {
+            {start.toLocaleDateString("en-IN", { timeZone: EVENT_TZ,
               weekday: "long",
               day: "numeric",
               month: "long",
               year: "numeric",
             })}
             {" · "}
-            {start.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+            {start.toLocaleTimeString("en-IN", { timeZone: EVENT_TZ, hour: "2-digit", minute: "2-digit" })}
           </p>
           {event.venue ? (
             <p className="text-sm text-slate-600">

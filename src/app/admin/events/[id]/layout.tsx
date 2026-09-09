@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui";
 import { PageNav } from "@/components/nav";
 import { StatusControl } from "./status-control";
 import { DuplicateButton } from "./duplicate-button";
+import { EVENT_TZ } from "@/lib/datetime";
 
 const statusTone = {
   published: "green",
@@ -56,7 +57,7 @@ export default async function EventLayout({
             </Badge>
           </h1>
           <p className="mt-1 text-sm text-ink-400">
-            {start.toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" })}
+            {start.toLocaleString("en-IN", { timeZone: EVENT_TZ, dateStyle: "full", timeStyle: "short" })}
             {event.venue ? ` · ${event.venue}` : ""}
           </p>
         </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Card, SectionTitle } from "@/components/ui";
+import { dateTime } from "@/lib/datetime";
 
 function Copyable({ code, label }: { code: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -69,7 +70,7 @@ export function EmbedPanel({
 </a>`;
 
   const whatsappText = `🎉 *${title}*
-${venue ? `📍 ${venue}\n` : ""}🗓 ${new Date(startsAt * 1000).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+${venue ? `📍 ${venue}\n` : ""}🗓 ${dateTime(startsAt)}
 
 Book your passes here 👇
 ${url}`;

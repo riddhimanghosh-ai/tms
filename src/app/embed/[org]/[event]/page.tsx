@@ -3,6 +3,7 @@ import { loadPublicEvent } from "@/lib/public-event";
 import { BookingWidget } from "@/components/booking/booking-widget";
 import { ViewTracker } from "@/components/booking/view-tracker";
 import { EmbedAutoHeight } from "@/components/booking/embed-auto-height";
+import { EVENT_TZ } from "@/lib/datetime";
 
 /**
  * The bare booking surface an organiser drops into their own site. No hero,
@@ -32,9 +33,9 @@ export default async function EmbedPage({
         <div className="mb-4">
           <h1 className="text-xl font-bold tracking-tight text-slate-900">{event.title}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {start.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+            {start.toLocaleDateString("en-IN", { timeZone: EVENT_TZ, day: "numeric", month: "long", year: "numeric" })}
             {" · "}
-            {start.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+            {start.toLocaleTimeString("en-IN", { timeZone: EVENT_TZ, hour: "2-digit", minute: "2-digit" })}
             {event.venue ? ` · ${event.venue}` : ""}
           </p>
         </div>

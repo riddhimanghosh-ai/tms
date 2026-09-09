@@ -1,3 +1,4 @@
+import { timeOnly } from "@/lib/datetime";
 export function TicketCard({
   code,
   qr,
@@ -59,10 +60,7 @@ export function TicketCard({
             <div>
               <dt className="text-xs text-slate-400">Doors</dt>
               <dd className="font-medium text-slate-900">
-                {new Date(startsAt * 1000).toLocaleTimeString("en-IN", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {timeOnly(startsAt)}
               </dd>
             </div>
           </dl>

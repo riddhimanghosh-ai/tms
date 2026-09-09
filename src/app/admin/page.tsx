@@ -8,6 +8,7 @@ import { zoneAvailability } from "@/lib/inventory";
 import { formatMinor, formatMinorShort } from "@/lib/money";
 import { Badge, ButtonLink, Card, EmptyState, SectionTitle } from "@/components/ui";
 import { StatTile } from "@/components/charts";
+import { dateTime } from "@/lib/datetime";
 
 const statusTone = {
   published: "green",
@@ -88,10 +89,7 @@ export default async function AdminHome() {
                         <div className="min-w-0">
                           <p className="truncate font-medium">{event.title}</p>
                           <p className="mt-0.5 text-sm text-ink-400">
-                            {new Date(event.startsAt * 1000).toLocaleString("en-IN", {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })}
+                            {dateTime(event.startsAt)}
                             {event.venue ? ` · ${event.venue}` : ""}
                           </p>
                         </div>

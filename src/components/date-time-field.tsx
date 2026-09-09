@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { cn, inputClass } from "./ui";
+import { EVENT_TZ } from "@/lib/datetime";
 
 /** `datetime-local` values are local wall-clock strings, never ISO/UTC. */
 function toLocalParts(ts: number | null | undefined) {
@@ -34,7 +35,7 @@ function prettyPreview(date: string, time: string) {
   const [hh, mm] = (time || "00:00").split(":").map(Number);
   const dt = new Date(y, m - 1, d, hh, mm);
   if (Number.isNaN(dt.getTime())) return null;
-  return dt.toLocaleString("en-IN", {
+  return dt.toLocaleString("en-IN", { timeZone: EVENT_TZ,
     weekday: "long",
     day: "numeric",
     month: "long",

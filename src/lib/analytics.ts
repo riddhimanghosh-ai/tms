@@ -2,6 +2,7 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db, first } from "@/db";
 import { events, orders, pageViews, referralCodes, tickets, zones } from "@/db/schema";
 import { zoneAvailability } from "./inventory";
+import { dayMonth } from "@/lib/datetime";
 
 const DAY = 86400;
 const nowSec = () => Math.floor(Date.now() / 1000);
@@ -138,10 +139,7 @@ export async function eventStats(eventId: string, windowDays: number | null = 30
     const hit = byDay.get(d);
     daily.push({
       ts: d * DAY,
-      label: new Date(d * DAY * 1000).toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-      }),
+      label: dayMonth(d * DAY),
       value: Number(hit?.gross ?? 0),
       secondary: Number(hit?.tickets ?? 0),
     });

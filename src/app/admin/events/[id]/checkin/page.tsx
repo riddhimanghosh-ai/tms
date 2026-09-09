@@ -4,6 +4,7 @@ import { events, scans, tickets } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { Badge, Card, SectionTitle } from "@/components/ui";
 import { Scanner } from "./scanner";
+import { timeOnly } from "@/lib/datetime";
 
 export default async function CheckinPage({
   params,
@@ -71,10 +72,7 @@ export default async function CheckinPage({
                     {scan.direction === "in" ? "in" : "out"}
                   </Badge>
                   <span className="tabular text-xs text-ink-400">
-                    {new Date(scan.at * 1000).toLocaleTimeString("en-IN", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {timeOnly(scan.at)}
                   </span>
                 </div>
               </li>

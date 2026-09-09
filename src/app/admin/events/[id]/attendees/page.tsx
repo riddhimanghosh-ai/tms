@@ -3,6 +3,7 @@ import { db, first } from "@/db";
 import { events, orders, tickets } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { Badge, Card, EmptyState, Input } from "@/components/ui";
+import { EVENT_TZ } from "@/lib/datetime";
 
 export default async function AttendeesPage({
   params,
@@ -99,7 +100,7 @@ export default async function AttendeesPage({
                     {ticket.status === "checked_in" ? (
                       <Badge tone="green">
                         in ·{" "}
-                        {new Date((ticket.checkedInAt ?? 0) * 1000).toLocaleTimeString("en-IN", {
+                        {new Date((ticket.checkedInAt ?? 0) * 1000).toLocaleTimeString("en-IN", { timeZone: EVENT_TZ,
                           hour: "2-digit",
                           minute: "2-digit",
                         })}

@@ -6,6 +6,7 @@ import { BookingWidget } from "@/components/booking/booking-widget";
 import { BuyerNav } from "@/components/booking/buyer-nav";
 import { Countdown } from "@/components/booking/countdown";
 import { UrgencyStrip, urgencySignals } from "@/components/booking/urgency";
+import { EVENT_TZ } from "@/lib/datetime";
 
 type Props = {
   params: Promise<{ org: string; event: string }>;
@@ -51,14 +52,14 @@ export default async function BookPage({ params, searchParams }: Props) {
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
             <h1 className="text-lg font-semibold tracking-tight text-slate-900">{event.title}</h1>
             <p className="mt-1 text-sm text-slate-500">
-              {start.toLocaleDateString("en-IN", {
+              {start.toLocaleDateString("en-IN", { timeZone: EVENT_TZ,
                 weekday: "long",
                 day: "numeric",
                 month: "long",
                 year: "numeric",
               })}
               {" · "}
-              {start.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+              {start.toLocaleTimeString("en-IN", { timeZone: EVENT_TZ, hour: "2-digit", minute: "2-digit" })}
             </p>
             {event.venue ? (
               <p className="mt-0.5 text-sm text-slate-500">

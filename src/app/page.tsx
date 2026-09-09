@@ -5,6 +5,7 @@ import { events, organizers } from "@/db/schema";
 import { formatMinor } from "@/lib/money";
 import { Wordmark } from "@/components/brand";
 import { EmptyState } from "@/components/ui";
+import { EVENT_TZ } from "@/lib/datetime";
 
 // The marketplace reads live inventory on every request.
 export const dynamic = "force-dynamic";
@@ -187,7 +188,7 @@ export default async function Marketplace({ searchParams }: Props) {
 
                     <div className="p-4">
                       <p className="text-sm text-ink-400">
-                        {start.toLocaleDateString("en-IN", {
+                        {start.toLocaleDateString("en-IN", { timeZone: EVENT_TZ,
                           weekday: "short",
                           day: "numeric",
                           month: "short",

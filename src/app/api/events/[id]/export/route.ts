@@ -3,6 +3,7 @@ import { db, first } from "@/db";
 import { discountCodes, events, orderItems, orders, referralCodes, tickets } from "@/db/schema";
 import { getOrganizer } from "@/lib/auth";
 import { minorToRupees } from "@/lib/money";
+import { exportStamp } from "@/lib/datetime";
 
 const csvCell = (v: unknown) => {
   const s = v == null ? "" : String(v);
@@ -12,8 +13,8 @@ const csvCell = (v: unknown) => {
 const toCsv = (headers: string[], rows: unknown[][]) =>
   [headers, ...rows].map((r) => r.map(csvCell).join(",")).join("\n");
 
-const stamp = (ts: number | null) =>
-  ts ? new Date(ts * 1000).toISOString().replace("T", " ").slice(0, 16) : "";
+// Exports read and sort in the venue timezone, not the server's.
+const stamp = exportStamp;
 
 export async function GET(
   request: Request,

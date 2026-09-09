@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { cn } from "./ui";
+import { EVENT_TZ } from "@/lib/datetime";
 
 export const RANGES = [
   { value: "7", label: "Last 7 days" },
@@ -49,7 +50,7 @@ export function RangeLabel({ days, nowSec }: { days: number | null; nowSec: numb
   const end = new Date(nowSec * 1000);
   const startDate = new Date((nowSec - days * 86400) * 1000);
   const fmt = (d: Date, withYear = false) =>
-    d.toLocaleDateString("en-IN", {
+    d.toLocaleDateString("en-IN", { timeZone: EVENT_TZ,
       day: "numeric",
       month: "short",
       ...(withYear ? { year: "numeric" } : {}),

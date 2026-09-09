@@ -8,6 +8,8 @@ import { UrgencyStrip, urgencySignals } from "@/components/booking/urgency";
 import { HIGHLIGHT_ICONS, parseHighlights } from "@/lib/highlights";
 import { ViewTracker } from "@/components/booking/view-tracker";
 import { BuyerNav } from "@/components/booking/buyer-nav";
+import { dayMonth } from "@/lib/datetime";
+import { EVENT_TZ } from "@/lib/datetime";
 
 type Props = {
   params: Promise<{ org: string; event: string }>;
@@ -81,12 +83,12 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
     {
       label: multiNight ? "Runs" : "Date",
       value: multiNight && firstNight && lastNight
-        ? `${new Date(firstNight.startsAt * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${new Date(lastNight.startsAt * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
-        : start.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }),
+        ? `${dayMonth(firstNight.startsAt)} – ${dayMonth(lastNight.startsAt)}`
+        : start.toLocaleDateString("en-IN", { timeZone: EVENT_TZ, weekday: "long", day: "numeric", month: "long" }),
     },
     {
       label: "Doors",
-      value: new Date((event.doorsOpenAt ?? event.startsAt) * 1000).toLocaleTimeString("en-IN", {
+      value: new Date((event.doorsOpenAt ?? event.startsAt) * 1000).toLocaleTimeString("en-IN", { timeZone: EVENT_TZ,
         hour: "2-digit",
         minute: "2-digit",
       }),
@@ -259,7 +261,7 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
                       }`}
                     >
                       <span className="block text-[10px] uppercase tracking-wide opacity-80">
-                        {d.toLocaleDateString("en-IN", { month: "short" })}
+                        {d.toLocaleDateString("en-IN", { timeZone: EVENT_TZ, month: "short" })}
                       </span>
                       <span className="block text-base font-semibold leading-tight">
                         {d.getDate()}
@@ -276,7 +278,7 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
                           ? "Passed"
                           : n.soldOut
                             ? "Sold out"
-                            : `${d.toLocaleDateString("en-IN", { weekday: "long" })} · ${d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`}
+                            : `${d.toLocaleDateString("en-IN", { timeZone: EVENT_TZ, weekday: "long" })} · ${d.toLocaleTimeString("en-IN", { timeZone: EVENT_TZ, hour: "2-digit", minute: "2-digit" })}`}
                       </p>
                     </div>
                     {!gone ? (

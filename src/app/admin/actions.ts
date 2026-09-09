@@ -20,6 +20,7 @@ import {
 import { requireOrganizer } from "@/lib/auth";
 import { id, slugify } from "@/lib/ids";
 import { rupeesToMinor } from "@/lib/money";
+import { timeOnly } from "@/lib/datetime";
 import { packHighlights, type Highlight, type HighlightIcon } from "@/lib/highlights";
 import {
   ringSeatLabel,
@@ -698,7 +699,7 @@ export async function scanTicket(
 }
 
 function stampTime(ts: number | null) {
-  return ts ? new Date(ts * 1000).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—";
+  return ts ? timeOnly(ts) : "—";
 }
 
 async function admit(

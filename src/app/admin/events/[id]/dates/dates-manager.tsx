@@ -13,6 +13,7 @@ import { FormError,
 import { DateTimeField } from "@/components/date-time-field";
 import { toast, useActionToast } from "@/components/toast";
 import { formatMinor } from "@/lib/money";
+import { fullDateTime, monthShort } from "@/lib/datetime";
 
 type Night = {
   id: string;
@@ -87,7 +88,7 @@ export function DatesManager({
                   <div className="flex min-w-0 items-center gap-4">
                     <div className="w-14 shrink-0 rounded-lg border border-ink-700 bg-ink-850 py-1.5 text-center">
                       <span className="block text-[10px] uppercase tracking-wide text-ink-400">
-                        {new Date(n.startsAt * 1000).toLocaleDateString("en-IN", { month: "short" })}
+                        {monthShort(n.startsAt)}
                       </span>
                       <span className="block text-lg font-semibold leading-tight">
                         {new Date(n.startsAt * 1000).getDate()}
@@ -99,13 +100,7 @@ export function DatesManager({
                         {!n.active ? <Badge tone="amber">not selling</Badge> : null}
                       </p>
                       <p className="text-sm text-ink-400">
-                        {new Date(n.startsAt * 1000).toLocaleString("en-IN", {
-                          weekday: "long",
-                          day: "numeric",
-                          month: "long",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        {fullDateTime(n.startsAt)}
                       </p>
                       {n.note ? <p className="mt-0.5 text-sm text-ink-500">{n.note}</p> : null}
                     </div>
