@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { events, orderItems, orders, organizers } from "@/db/schema";
 import { activeProvider } from "@/lib/payments";
 import { PaymentPanel } from "./payment-panel";
@@ -12,13 +12,13 @@ export default async function PayPage({
 }) {
   const { publicId } = await params;
 
-  const row = await db
+  const row = await first(db
     .select({ order: orders, event: events, organizer: organizers })
     .from(orders)
     .innerJoin(events, eq(events.id, orders.eventId))
     .innerJoin(organizers, eq(organizers.id, orders.organizerId))
     .where(eq(orders.publicId, publicId))
-    .get();
+    );
   if (!row) notFound();
   if (row.order.status === "paid") redirect(`/order/${publicId}`);
 
@@ -26,7 +26,7 @@ export default async function PayPage({
     .select()
     .from(orderItems)
     .where(eq(orderItems.orderId, row.order.id))
-    .all();
+    ;
 
   return (
     <PaymentPanel

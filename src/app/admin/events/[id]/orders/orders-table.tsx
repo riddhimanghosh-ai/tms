@@ -6,6 +6,7 @@ import { cancelOrder, orderDetail } from "@/app/admin/actions";
 import { Badge, Button, Card, cn } from "@/components/ui";
 import { toast } from "@/components/toast";
 import { formatMinor } from "@/lib/money";
+import { useOrigin } from "@/components/use-origin";
 
 type Row = {
   id: string;
@@ -158,7 +159,8 @@ function OrderDetail({
   onChanged: () => void;
 }) {
   const [pending, start] = useTransition();
-  const orderUrl = typeof window !== "undefined" ? `${window.location.origin}/order/${order.publicId}` : "";
+  const origin = useOrigin();
+  const orderUrl = `${origin}/order/${order.publicId}`;
 
   const whatsapp = `https://wa.me/${order.buyerPhone.replace(/\D/g, "")}?text=${encodeURIComponent(
     `Hi ${order.buyerName}, here are your passes for ${eventTitle} (${order.publicId}):\n${orderUrl}`,

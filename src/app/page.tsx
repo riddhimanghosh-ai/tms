@@ -48,7 +48,7 @@ export default async function Marketplace({ searchParams }: Props) {
     .innerJoin(organizers, eq(organizers.id, events.organizerId))
     .where(and(...filters))
     .orderBy(asc(events.startsAt))
-    .all();
+    ;
 
   const cities = [
     ...new Set(
@@ -57,7 +57,7 @@ export default async function Marketplace({ searchParams }: Props) {
           .select({ city: events.city })
           .from(events)
           .where(and(eq(events.status, "published"), eq(events.listPublicly, 1)))
-          .all()
+          
       )
         .map((r) => r.city)
         .filter(Boolean) as string[],

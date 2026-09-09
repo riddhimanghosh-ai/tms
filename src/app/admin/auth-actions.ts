@@ -2,7 +2,7 @@
 
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { organizers } from "@/db/schema";
 import { createSession, destroySession, hashPassword, verifyPassword } from "@/lib/auth";
 import { id, slugify } from "@/lib/ids";
@@ -14,11 +14,11 @@ export async function login(_prev: AuthState, form: FormData): Promise<AuthState
   const password = String(form.get("password") ?? "");
   if (!email || !password) return { error: "Enter your email and password." };
 
-  const organizer = await db
+  const organizer = await first(db
     .select()
     .from(organizers)
     .where(eq(organizers.email, email))
-    .get();
+    );
 
   if (!organizer || !verifyPassword(password, organizer.passwordHash)) {
     return { error: "That email and password don't match." };
@@ -36,15 +36,15 @@ export async function signup(_prev: AuthState, form: FormData): Promise<AuthStat
   if (!name || !email || password.length < 8)
     return { error: "Name, email and a password of 8+ characters are required." };
 
-  const existing = await db
+  const existing = await first(db
     .select()
     .from(organizers)
     .where(eq(organizers.email, email))
-    .get();
+    );
   if (existing) return { error: "An account already uses that email." };
 
   let slug = slugify(name) || "organiser";
-  while (await db.select().from(organizers).where(eq(organizers.slug, slug)).get()) {
+  while (await first(db.select().from(organizers).where(eq(organizers.slug, slug)))) {
     slug = `${slug}-${Math.floor(Math.random() * 900 + 100)}`;
   }
 

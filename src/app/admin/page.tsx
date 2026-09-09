@@ -18,7 +18,7 @@ const statusTone = {
 
 export default async function AdminHome() {
   const organizer = await requireOrganizer();
-  const summary = organizerSummary(organizer.id);
+  const summary = await organizerSummary(organizer.id);
 
   const rows = await db
     .select({
@@ -31,8 +31,17 @@ export default async function AdminHome() {
     .leftJoin(orders, eq(orders.eventId, events.id))
     .where(eq(events.organizerId, organizer.id))
     .groupBy(events.id)
-    .orderBy(desc(events.startsAt))
-    .all();
+    .orderBy(desc(events.startsAt));
+
+  // Availability is a query per event, so resolve it before rendering.
+  const capacities = new Map(
+    await Promise.all(
+      rows.map(async ({ event }) => {
+        const avail = await zoneAvailability(event.id);
+        return [event.id, [...avail.values()].reduce((n, z) => n + z.capacity, 0)] as const;
+      }),
+    ),
+  );
 
   return (
     <div className="space-y-8">
@@ -67,8 +76,7 @@ export default async function AdminHome() {
         ) : (
           <ul className="grid gap-3 md:grid-cols-2">
             {rows.map(({ event, soldTickets, gross }) => {
-              const avail = zoneAvailability(event.id);
-              const capacity = [...avail.values()].reduce((n, z) => n + z.capacity, 0);
+              const capacity = capacities.get(event.id) ?? 0;
               const sold = Number(soldTickets);
               const pct = capacity ? Math.min(100, (sold / capacity) * 100) : 0;
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { events } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { Badge } from "@/components/ui";
@@ -26,11 +26,11 @@ export default async function EventLayout({
   const { id } = await params;
   const organizer = await requireOrganizer();
 
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) notFound();
 
   const publicPath = `/e/${organizer.slug}/${event.slug}`;

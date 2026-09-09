@@ -1,9 +1,9 @@
 import { and, asc, eq, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { eventDates, events, orders, organizers, seats, zones } from "@/db/schema";
 import { nightLabel } from "./booking";
 import { parseLayerList } from "./seat-layout";
-import { unavailableSeatIds, zoneAvailability } from "./inventory";
+import { nightsFreeCapacity, unavailableSeatIds, zoneAvailability } from "./inventory";
 import type { PublicSeat, PublicZone } from "@/components/booking/booking-widget";
 
 export type PublicNight = {
@@ -22,12 +22,12 @@ export async function loadPublicEvent(
   eventSlug: string,
   selectedNightId?: string | null,
 ) {
-  const row = await db
+  const row = await first(db
     .select({ event: events, organizer: organizers })
     .from(events)
     .innerJoin(organizers, eq(organizers.id, events.organizerId))
     .where(and(eq(organizers.slug, orgSlug), eq(events.slug, eventSlug)))
-    .get();
+    );
   if (!row) return null;
 
   const { event, organizer } = row;
@@ -38,20 +38,20 @@ export async function loadPublicEvent(
     .from(eventDates)
     .where(and(eq(eventDates.eventId, event.id), eq(eventDates.active, 1)))
     .orderBy(asc(eventDates.sortOrder), asc(eventDates.startsAt))
-    .all();
+    ;
 
   const upcoming = nightRows.filter((n) => n.startsAt >= nowSec - 6 * 3600);
   const chosen =
     nightRows.find((n) => n.id === selectedNightId) ?? upcoming[0] ?? nightRows[0] ?? null;
 
-  const avail = zoneAvailability(event.id, chosen?.id ?? null);
+  const avail = await zoneAvailability(event.id, chosen?.id ?? null);
 
   const zoneRows = await db
     .select()
     .from(zones)
     .where(and(eq(zones.eventId, event.id), eq(zones.active, 1)))
     .orderBy(zones.sortOrder)
-    .all();
+    ;
 
   const publicZones: PublicZone[] = zoneRows.map((z) => {
     const a = avail.get(z.id);
@@ -84,8 +84,8 @@ export async function loadPublicEvent(
 
   let publicSeats: PublicSeat[] = [];
   if (event.layoutType === "seated") {
-    const taken = unavailableSeatIds(event.id, chosen?.id ?? null);
-    const seatRows = await db.select().from(seats).where(eq(seats.eventId, event.id)).all();
+    const taken = await unavailableSeatIds(event.id, chosen?.id ?? null);
+    const seatRows = await db.select().from(seats).where(eq(seats.eventId, event.id));
     publicSeats = seatRows.map((s) => ({
       id: s.id,
       zoneId: s.zoneId,
@@ -101,26 +101,24 @@ export async function loadPublicEvent(
     }));
   }
 
-  // Each night gets its own sold-out flag, so the picker can grey one out.
-  const nights: PublicNight[] = nightRows.map((n) => {
-    const nightAvail = zoneAvailability(event.id, n.id);
-    const free = [...nightAvail.values()].reduce((sum, z) => sum + z.available, 0);
-    return {
-      id: n.id,
-      startsAt: n.startsAt,
-      endsAt: n.endsAt,
-      label: nightLabel(n),
-      note: n.note,
-      soldOut: free <= 0,
-      past: n.startsAt < nowSec - 6 * 3600,
-    };
-  });
+  // Each night gets its own sold-out flag, resolved in one pass rather than
+  // one availability query per night.
+  const freeByNight = await nightsFreeCapacity(event.id, nightRows.map((n) => n.id));
+  const nights: PublicNight[] = nightRows.map((n) => ({
+    id: n.id,
+    startsAt: n.startsAt,
+    endsAt: n.endsAt,
+    label: nightLabel(n),
+    note: n.note,
+    soldOut: (freeByNight.get(n.id) ?? 0) <= 0,
+    past: n.startsAt < nowSec - 6 * 3600,
+  }));
 
-  const sold = await db
+  const sold = await first(db
     .select({ n: sql<number>`coalesce(sum(${orders.ticketCount}), 0)` })
     .from(orders)
     .where(and(eq(orders.eventId, event.id), eq(orders.status, "paid")))
-    .get();
+    );
 
   return {
     event,

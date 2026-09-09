@@ -1,5 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { events, orders } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { eventStats } from "@/lib/analytics";
@@ -26,15 +26,15 @@ export default async function EventOverview({
   const { range = "30" } = await searchParams;
   const organizer = await requireOrganizer();
 
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) return null;
 
   const windowDays = range === "all" ? null : Number(range) || 30;
-  const stats = eventStats(id, windowDays);
+  const stats = await eventStats(id, windowDays);
 
   const recent = await db
     .select()
@@ -42,7 +42,7 @@ export default async function EventOverview({
     .where(and(eq(orders.eventId, id), eq(orders.status, "paid")))
     .orderBy(desc(orders.createdAt))
     .limit(6)
-    .all();
+    ;
 
   const live = event.status === "published";
 

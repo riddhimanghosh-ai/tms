@@ -1,5 +1,5 @@
 import { and, eq, isNull, or, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { discountCodes, events, orders, referralCodes, zones } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { CodesManager } from "./codes-manager";
@@ -11,11 +11,11 @@ export default async function CodesPage({
 }) {
   const { id } = await params;
   const organizer = await requireOrganizer();
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) return null;
 
   const discounts = await db
@@ -27,7 +27,7 @@ export default async function CodesPage({
         or(isNull(discountCodes.eventId), eq(discountCodes.eventId, id)),
       ),
     )
-    .all();
+    ;
 
   const referrals = await db
     .select({
@@ -44,9 +44,9 @@ export default async function CodesPage({
     )
     .where(eq(referralCodes.eventId, id))
     .groupBy(referralCodes.id)
-    .all();
+    ;
 
-  const zoneRows = await db.select().from(zones).where(eq(zones.eventId, id)).all();
+  const zoneRows = await db.select().from(zones).where(eq(zones.eventId, id));
 
   return (
     <CodesManager

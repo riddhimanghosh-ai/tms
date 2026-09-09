@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { eventDates, events, seats, tickets, zones } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { zoneAvailability } from "@/lib/inventory";
@@ -13,11 +13,11 @@ export default async function TicketsPage({
 }) {
   const { id } = await params;
   const organizer = await requireOrganizer();
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) return null;
 
   const zoneRows = await db
@@ -25,19 +25,19 @@ export default async function TicketsPage({
     .from(zones)
     .where(eq(zones.eventId, id))
     .orderBy(zones.sortOrder)
-    .all();
+    ;
 
   const nightCount = (
-    await db.select().from(eventDates).where(eq(eventDates.eventId, id)).all()
+    await db.select().from(eventDates).where(eq(eventDates.eventId, id))
   ).length;
 
-  const avail = zoneAvailability(id);
+  const avail = await zoneAvailability(id);
   const seatRows =
     event.layoutType === "seated"
-      ? await db.select().from(seats).where(eq(seats.eventId, id)).all()
+      ? await db.select().from(seats).where(eq(seats.eventId, id))
       : [];
   const soldSeatIds = new Set(
-    (await db.select({ seatId: tickets.seatId }).from(tickets).where(eq(tickets.eventId, id)).all())
+    (await db.select({ seatId: tickets.seatId }).from(tickets).where(eq(tickets.eventId, id)))
       .map((t) => t.seatId)
       .filter(Boolean) as string[],
   );

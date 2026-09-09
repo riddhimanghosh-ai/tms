@@ -1,16 +1,15 @@
 import { sql } from "drizzle-orm";
-import {
-  index,
-  integer,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+import { index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 
-const now = sql`(unixepoch())`;
+/**
+ * Times are Unix seconds throughout — the app does all of its date maths in
+ * plain integers, and a timestamptz column would only add a conversion at
+ * every boundary.
+ */
+const now = sql`extract(epoch from now())::int`;
 
 /** A tenant. One Garba/event company. Everything else hangs off this. */
-export const organizers = sqliteTable(
+export const organizers = pgTable(
   "organizers",
   {
     id: text("id").primaryKey(),
@@ -30,7 +29,7 @@ export const organizers = sqliteTable(
   ],
 );
 
-export const sessions = sqliteTable("sessions", {
+export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   organizerId: text("organizer_id")
     .notNull()
@@ -44,7 +43,7 @@ export const sessions = sqliteTable("sessions", {
  *  - "open"   : open ground. Zones are just priced buckets with a capacity.
  *  - "seated" : zones own a seat grid and buyers pick specific seats.
  */
-export const events = sqliteTable(
+export const events = pgTable(
   "events",
   {
     id: text("id").primaryKey(),
@@ -106,7 +105,7 @@ export const events = sqliteTable(
  * One night of a multi-night event. A Garba runs nine of these; a one-off show
  * has a single row. Inventory, seats and passes are all scoped to a night.
  */
-export const eventDates = sqliteTable(
+export const eventDates = pgTable(
   "event_dates",
   {
     id: text("id").primaryKey(),
@@ -125,7 +124,7 @@ export const eventDates = sqliteTable(
 );
 
 /** A priced bucket. "VIP Pass", "Couple Entry", "Balcony Block B". */
-export const zones = sqliteTable(
+export const zones = pgTable(
   "zones",
   {
     id: text("id").primaryKey(),
@@ -180,7 +179,7 @@ export const zones = sqliteTable(
   (t) => [index("zones_event_idx").on(t.eventId)],
 );
 
-export const seats = sqliteTable(
+export const seats = pgTable(
   "seats",
   {
     id: text("id").primaryKey(),
@@ -213,7 +212,7 @@ export const seats = sqliteTable(
 );
 
 /** Short-lived reservation so two buyers can't race for the same seat. */
-export const seatHolds = sqliteTable(
+export const seatHolds = pgTable(
   "seat_holds",
   {
     id: text("id").primaryKey(),
@@ -239,7 +238,7 @@ export const seatHolds = sqliteTable(
   ],
 );
 
-export const discountCodes = sqliteTable(
+export const discountCodes = pgTable(
   "discount_codes",
   {
     id: text("id").primaryKey(),
@@ -280,7 +279,7 @@ export const discountCodes = sqliteTable(
 );
 
 /** A promoter's code: buyer gets a discount, promoter earns a commission. */
-export const referralCodes = sqliteTable(
+export const referralCodes = pgTable(
   "referral_codes",
   {
     id: text("id").primaryKey(),
@@ -309,7 +308,7 @@ export const referralCodes = sqliteTable(
   ],
 );
 
-export const orders = sqliteTable(
+export const orders = pgTable(
   "orders",
   {
     id: text("id").primaryKey(),
@@ -353,7 +352,7 @@ export const orders = sqliteTable(
   ],
 );
 
-export const orderItems = sqliteTable(
+export const orderItems = pgTable(
   "order_items",
   {
     id: text("id").primaryKey(),
@@ -371,7 +370,7 @@ export const orderItems = sqliteTable(
 );
 
 /** One row per admitted ticket. This is what the QR at the gate resolves to. */
-export const tickets = sqliteTable(
+export const tickets = pgTable(
   "tickets",
   {
     id: text("id").primaryKey(),
@@ -416,7 +415,7 @@ export const tickets = sqliteTable(
 );
 
 /** Every gate movement. The audit trail behind the live "inside" count. */
-export const scans = sqliteTable(
+export const scans = pgTable(
   "scans",
   {
     id: text("id").primaryKey(),
@@ -442,7 +441,7 @@ export const scans = sqliteTable(
 );
 
 /** Landing-page view counter, so conversion rate is a real number. */
-export const pageViews = sqliteTable(
+export const pageViews = pgTable(
   "page_views",
   {
     id: text("id").primaryKey(),

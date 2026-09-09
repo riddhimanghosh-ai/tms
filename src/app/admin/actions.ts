@@ -3,7 +3,7 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import {
   discountCodes,
   eventDates,
@@ -42,11 +42,11 @@ const ts = (f: FormData, k: string) => {
 /** Throws unless the signed-in organiser owns this event. */
 async function ownedEvent(eventId: string) {
   const organizer = await requireOrganizer();
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, eventId), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) throw new Error("Event not found.");
   return { organizer, event };
 }
@@ -63,11 +63,11 @@ export async function createEvent(_prev: unknown, form: FormData) {
 
   let slug = slugify(title);
   while (
-    await db
+    await first(db
       .select()
       .from(events)
       .where(and(eq(events.organizerId, organizer.id), eq(events.slug, slug)))
-      .get()
+      )
   ) {
     slug = `${slug}-${Math.floor(Math.random() * 900 + 100)}`;
   }
@@ -134,7 +134,7 @@ export async function createEvent(_prev: unknown, form: FormData) {
   });
 
   if (seated) {
-    regenerateSeats({ zoneId, eventId, shape, rows, cols, rowStart: "A", ring });
+    await regenerateSeats({ zoneId, eventId, shape, rows, cols, rowStart: "A", ring });
   }
 
   // Even a one-off show gets a night row, so nothing downstream special-cases it.
@@ -289,7 +289,7 @@ export async function saveZone(_prev: unknown, form: FormData) {
   }
 
   if (kind === "seated") {
-    regenerateSeats({
+    await regenerateSeats({
       zoneId: targetId,
       eventId,
       shape,
@@ -376,7 +376,7 @@ function plannedSeats(args: {
  * Rebuilds a zone's seats to match its configuration. Seats already attached
  * to a ticket are kept, so changing a layout can never orphan a booking.
  */
-function regenerateSeats(args: {
+async function regenerateSeats(args: {
   zoneId: string;
   eventId: string;
   shape: ZoneShape;
@@ -386,13 +386,9 @@ function regenerateSeats(args: {
   ring: RingConfig;
 }) {
   const { zoneId, eventId } = args;
-  const existing = db.select().from(seats).where(eq(seats.zoneId, zoneId)).all();
+  const existing = await db.select().from(seats).where(eq(seats.zoneId, zoneId));
   const sold = new Set(
-    db
-      .select({ seatId: tickets.seatId })
-      .from(tickets)
-      .where(eq(tickets.zoneId, zoneId))
-      .all()
+    (await db.select({ seatId: tickets.seatId }).from(tickets).where(eq(tickets.zoneId, zoneId)))
       .map((t) => t.seatId)
       .filter(Boolean) as string[],
   );
@@ -401,10 +397,10 @@ function regenerateSeats(args: {
   const wanted = new Map(planned.map((p) => [p.label, p]));
   const have = new Map(existing.map((s) => [s.label, s]));
 
-  db.transaction((tx) => {
+  db.transaction(async (tx) => {
     for (const seat of existing) {
       if (!wanted.has(seat.label) && !sold.has(seat.id)) {
-        tx.delete(seats).where(eq(seats.id, seat.id)).run();
+        await tx.delete(seats).where(eq(seats.id, seat.id));
       }
     }
 
@@ -412,7 +408,7 @@ function regenerateSeats(args: {
       const current = have.get(spec.label);
       if (current) {
         // Geometry can shift when a layer is resized; keep the seat, move it.
-        tx.update(seats)
+        await tx.update(seats)
           .set({
             rowLabel: spec.rowLabel,
             seatNumber: spec.seatNumber,
@@ -423,32 +419,32 @@ function regenerateSeats(args: {
             ringSize: spec.ringSize,
           })
           .where(eq(seats.id, current.id))
-          .run();
+          ;
         continue;
       }
-      tx.insert(seats)
+      await tx.insert(seats)
         .values({ id: id(), zoneId, eventId, status: "available", ...spec })
-        .run();
+        ;
     }
   });
 }
 
 export async function deleteZone(zoneId: string) {
-  const zone = await db.select().from(zones).where(eq(zones.id, zoneId)).get();
+  const zone = await first(db.select().from(zones).where(eq(zones.id, zoneId)));
   if (!zone) return;
   await ownedEvent(zone.eventId);
-  const sold = await db
+  const sold = await first(db
     .select()
     .from(tickets)
     .where(eq(tickets.zoneId, zoneId))
-    .get();
+    );
   if (sold) throw new Error("This ticket type already has sales and can't be deleted.");
   await db.delete(zones).where(eq(zones.id, zoneId));
   revalidatePath(`/admin/events/${zone.eventId}/tickets`);
 }
 
 export async function toggleSeatBlock(seatId: string) {
-  const seat = await db.select().from(seats).where(eq(seats.id, seatId)).get();
+  const seat = await first(db.select().from(seats).where(eq(seats.id, seatId)));
   if (!seat) return;
   await ownedEvent(seat.eventId);
   await db
@@ -592,11 +588,11 @@ export async function scanTicket(
   const code = rawCode.trim().toUpperCase().replace(/\s+/g, "");
   if (!code) return { status: "error", message: "Scan or type a code." };
 
-  const ticket = await db
+  const ticket = await first(db
     .select()
     .from(tickets)
     .where(and(eq(tickets.code, code), eq(tickets.eventId, eventId)))
-    .get();
+    );
 
   if (!ticket)
     return { status: "invalid", message: "Not a valid pass", detail: "No such code for this event." };
@@ -649,14 +645,14 @@ export async function scanTicket(
         ticket: summary,
       };
     }
-    db.transaction((tx) => {
-      tx.update(tickets)
+    db.transaction(async (tx) => {
+      await tx.update(tickets)
         .set({ inside: 0, lastScanAt: now })
         .where(eq(tickets.id, ticket.id))
-        .run();
-      tx.insert(scans)
+        ;
+      await tx.insert(scans)
         .values({ id: id(), ticketId: ticket.id, eventId, showDateId: ticket.showDateId, direction: "out", at: now, by: "gate" })
-        .run();
+        ;
     });
     revalidatePath(`/admin/events/${eventId}/checkin`);
     return {
@@ -712,8 +708,8 @@ async function admit(
   now: number,
   firstEntry: number | null,
 ) {
-  db.transaction((tx) => {
-    tx.update(tickets)
+  db.transaction(async (tx) => {
+    await tx.update(tickets)
       .set({
         status: "checked_in",
         inside: 1,
@@ -723,10 +719,10 @@ async function admit(
         entryCount: sql`${tickets.entryCount} + 1`,
       })
       .where(eq(tickets.id, ticketId))
-      .run();
-    tx.insert(scans)
+      ;
+    await tx.insert(scans)
       .values({ id: id(), ticketId, eventId, showDateId, direction: "in", at: now, by: "gate" })
-      .run();
+      ;
   });
 }
 
@@ -739,26 +735,26 @@ export async function undoLastScan(ticketId: string, eventId: string) {
     .from(scans)
     .where(eq(scans.ticketId, ticketId))
     .orderBy(desc(scans.at))
-    .all();
+    ;
 
   const last = history[0];
   const previous = history[1];
 
-  db.transaction((tx) => {
-    if (last) tx.delete(scans).where(eq(scans.id, last.id)).run();
+  db.transaction(async (tx) => {
+    if (last) tx.delete(scans).where(eq(scans.id, last.id));
 
     const nowInside = previous ? (previous.direction === "in" ? 1 : 0) : 0;
-    tx.update(tickets)
+    await tx.update(tickets)
       .set({
         inside: nowInside,
         status: previous ? "checked_in" : "valid",
         checkedInAt: previous ? undefined : null,
         checkedInBy: previous ? undefined : null,
         lastScanAt: previous?.at ?? null,
-        entryCount: sql`max(0, ${tickets.entryCount} - ${last?.direction === "in" ? 1 : 0})`,
+        entryCount: sql`greatest(0, ${tickets.entryCount} - ${last?.direction === "in" ? 1 : 0})`,
       })
       .where(eq(tickets.id, ticketId))
-      .run();
+      ;
   });
 
   revalidatePath(`/admin/events/${eventId}/checkin`);
@@ -776,30 +772,30 @@ export async function duplicateEvent(eventId: string) {
 
   let slug = `${event.slug}-copy`;
   while (
-    await db
+    await first(db
       .select()
       .from(events)
       .where(and(eq(events.organizerId, organizer.id), eq(events.slug, slug)))
-      .get()
+      )
   ) {
     slug = `${event.slug}-copy-${Math.floor(Math.random() * 900 + 100)}`;
   }
 
   const newId = id();
-  const sourceZones = await db.select().from(zones).where(eq(zones.eventId, eventId)).all();
+  const sourceZones = await db.select().from(zones).where(eq(zones.eventId, eventId));
   const sourceDiscounts = await db
     .select()
     .from(discountCodes)
     .where(eq(discountCodes.eventId, eventId))
-    .all();
+    ;
   const sourceReferrals = await db
     .select()
     .from(referralCodes)
     .where(eq(referralCodes.eventId, eventId))
-    .all();
+    ;
 
-  db.transaction((tx) => {
-    tx.insert(events)
+  db.transaction(async (tx) => {
+    await tx.insert(events)
       .values({
         ...event,
         id: newId,
@@ -808,17 +804,17 @@ export async function duplicateEvent(eventId: string) {
         status: "draft",
         createdAt: Math.floor(Date.now() / 1000),
       })
-      .run();
+      ;
 
     const zoneIdMap = new Map<string, string>();
     for (const zone of sourceZones) {
       const zoneId = id();
       zoneIdMap.set(zone.id, zoneId);
-      tx.insert(zones).values({ ...zone, id: zoneId, eventId: newId }).run();
+      await tx.insert(zones).values({ ...zone, id: zoneId, eventId: newId });
     }
 
     for (const code of sourceDiscounts) {
-      tx.insert(discountCodes)
+      await tx.insert(discountCodes)
         .values({
           ...code,
           id: id(),
@@ -828,26 +824,26 @@ export async function duplicateEvent(eventId: string) {
           zoneId: code.zoneId ? (zoneIdMap.get(code.zoneId) ?? null) : null,
           code: `${code.code}-2`,
         })
-        .run();
+        ;
     }
 
     for (const code of sourceReferrals) {
-      tx.insert(referralCodes)
+      await tx.insert(referralCodes)
         .values({ ...code, id: id(), eventId: newId, clicks: 0, code: `${code.code}-2` })
-        .run();
+        ;
     }
   });
 
   // Seats are regenerated from each zone's own configuration.
   for (const zone of sourceZones) {
     if (zone.kind !== "seated") continue;
-    const copied = await db
+    const copied = await first(db
       .select()
       .from(zones)
       .where(and(eq(zones.eventId, newId), eq(zones.name, zone.name)))
-      .get();
+      );
     if (!copied) continue;
-    regenerateSeats({
+    await regenerateSeats({
       zoneId: copied.id,
       eventId: newId,
       shape: zone.shape as ZoneShape,
@@ -886,7 +882,7 @@ export async function setSeatsBlocked(
         .select({ seatId: tickets.seatId })
         .from(tickets)
         .where(and(eq(tickets.eventId, eventId), inArray(tickets.seatId, seatIds)))
-        .all()
+        
     )
       .map((t) => t.seatId)
       .filter(Boolean) as string[],
@@ -911,20 +907,20 @@ export async function setSeatsBlocked(
  * to the pool immediately, since availability counts non-cancelled tickets.
  */
 export async function cancelOrder(orderId: string, reason: "refunded" | "cancelled") {
-  const order = await db.select().from(orders).where(eq(orders.id, orderId)).get();
+  const order = await first(db.select().from(orders).where(eq(orders.id, orderId)));
   if (!order) throw new Error("Order not found.");
   await ownedEvent(order.eventId);
 
-  db.transaction((tx) => {
-    tx.update(tickets).set({ status: "cancelled" }).where(eq(tickets.orderId, orderId)).run();
-    tx.update(orders).set({ status: reason }).where(eq(orders.id, orderId)).run();
+  db.transaction(async (tx) => {
+    await tx.update(tickets).set({ status: "cancelled" }).where(eq(tickets.orderId, orderId));
+    await tx.update(orders).set({ status: reason }).where(eq(orders.id, orderId));
 
     // Give a limited-use code its redemption back.
     if (order.discountCodeId && order.status === "paid") {
-      tx.update(discountCodes)
-        .set({ usedCount: sql`max(0, ${discountCodes.usedCount} - 1)` })
+      await tx.update(discountCodes)
+        .set({ usedCount: sql`greatest(0, ${discountCodes.usedCount} - 1)` })
         .where(eq(discountCodes.id, order.discountCodeId))
-        .run();
+        ;
     }
   });
 
@@ -934,12 +930,12 @@ export async function cancelOrder(orderId: string, reason: "refunded" | "cancell
 
 /** Full detail for the order drawer — items, passes and their entry state. */
 export async function orderDetail(orderId: string) {
-  const order = await db.select().from(orders).where(eq(orders.id, orderId)).get();
+  const order = await first(db.select().from(orders).where(eq(orders.id, orderId)));
   if (!order) throw new Error("Order not found.");
   await ownedEvent(order.eventId);
 
-  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId)).all();
-  const passes = await db.select().from(tickets).where(eq(tickets.orderId, orderId)).all();
+  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+  const passes = await db.select().from(tickets).where(eq(tickets.orderId, orderId));
 
   return {
     order,
@@ -978,7 +974,7 @@ export async function addEventDate(_prev: unknown, form: FormData) {
     .select()
     .from(eventDates)
     .where(eq(eventDates.eventId, eventId))
-    .all();
+    ;
 
   if (existing.some((n) => n.startsAt === startsAt))
     return { error: "That night is already on the list." };
@@ -1010,7 +1006,7 @@ export async function addNightRun(_prev: unknown, form: FormData) {
     .select()
     .from(eventDates)
     .where(eq(eventDates.eventId, eventId))
-    .all();
+    ;
   const taken = new Set(existing.map((n) => n.startsAt));
 
   const rows = [];
@@ -1057,11 +1053,11 @@ export async function updateEventDate(_prev: unknown, form: FormData) {
 export async function deleteEventDate(dateId: string, eventId: string) {
   await ownedEvent(eventId);
 
-  const soldOnNight = await db
+  const soldOnNight = await first(db
     .select({ n: sql<number>`count(*)` })
     .from(tickets)
     .where(and(eq(tickets.eventId, eventId), eq(tickets.showDateId, dateId)))
-    .get();
+    );
 
   if (Number(soldOnNight?.n ?? 0) > 0)
     throw new Error("Passes have been sold for this night — pause it instead of deleting it.");

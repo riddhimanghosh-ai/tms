@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { events, orders, organizers, tickets } from "@/db/schema";
 import { qrSvg } from "@/lib/qr";
 import { TicketCard } from "@/components/booking/ticket-card";
@@ -14,14 +14,14 @@ export default async function TicketPage({
 }) {
   const { code } = await params;
 
-  const row = await db
+  const row = await first(db
     .select({ ticket: tickets, event: events, organizer: organizers, order: orders })
     .from(tickets)
     .innerJoin(events, eq(events.id, tickets.eventId))
     .innerJoin(orders, eq(orders.id, tickets.orderId))
     .innerJoin(organizers, eq(organizers.id, events.organizerId))
     .where(eq(tickets.code, code.toUpperCase()))
-    .get();
+    );
   if (!row) notFound();
 
   const qr = await qrSvg(row.ticket.code);

@@ -1,5 +1,5 @@
 import { and, desc, eq, like, or, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { discountCodes, events, orderItems, orders, referralCodes } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { EmptyState, Input } from "@/components/ui";
@@ -18,11 +18,11 @@ export default async function OrdersPage({
   const { q = "", status = "" } = await searchParams;
   const organizer = await requireOrganizer();
 
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) return null;
 
   const filters = [eq(orders.eventId, id)];
@@ -42,7 +42,7 @@ export default async function OrdersPage({
   const rows = await db
     .select({
       order: orders,
-      items: sql<string>`group_concat(${orderItems.zoneName} || ' × ' || ${orderItems.qty}, ', ')`,
+      items: sql<string>`string_agg(${orderItems.zoneName} || ' × ' || ${orderItems.qty}::text, ', ')`,
       discountCode: discountCodes.code,
       referralCode: referralCodes.code,
     })
@@ -51,10 +51,10 @@ export default async function OrdersPage({
     .leftJoin(discountCodes, eq(discountCodes.id, orders.discountCodeId))
     .leftJoin(referralCodes, eq(referralCodes.id, orders.referralCodeId))
     .where(and(...filters))
-    .groupBy(orders.id)
+    .groupBy(orders.id, discountCodes.code, referralCodes.code)
     .orderBy(desc(orders.createdAt))
     .limit(200)
-    .all();
+    ;
 
   return (
     <div className="space-y-4">

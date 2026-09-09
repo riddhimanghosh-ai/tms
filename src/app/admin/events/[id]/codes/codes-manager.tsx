@@ -19,6 +19,7 @@ import {
   cn,
 } from "@/components/ui";
 import { formatMinor } from "@/lib/money";
+import { useOrigin } from "@/components/use-origin";
 
 type Discount = {
   id: string;
@@ -237,7 +238,8 @@ export function CodesManager({
 
 function ShareLink({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
-  const full = typeof window !== "undefined" ? `${window.location.origin}${url}` : url;
+  const origin = useOrigin();
+  const full = `${origin}${url}`;
   return (
     <button
       type="button"
@@ -248,7 +250,7 @@ function ShareLink({ url }: { url: string }) {
       }}
       className="mt-2 max-w-full truncate rounded bg-ink-850 px-2 py-1 text-left font-mono text-xs text-ink-300 hover:text-ink-50"
     >
-      {copied ? "Copied ✓" : full}
+      {copied ? "Copied ✓" : (origin ? full : url)}
     </button>
   );
 }

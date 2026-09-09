@@ -2,7 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { organizers, sessions } from "@/db/schema";
 import { id } from "./ids";
 
@@ -52,12 +52,12 @@ export async function getOrganizer() {
   const sessionId = jar.get(COOKIE)?.value;
   if (!sessionId) return null;
 
-  const row = await db
+  const row = await first(db
     .select({ organizer: organizers, expiresAt: sessions.expiresAt })
     .from(sessions)
     .innerJoin(organizers, eq(sessions.organizerId, organizers.id))
     .where(eq(sessions.id, sessionId))
-    .get();
+    );
 
   if (!row) return null;
   if (row.expiresAt < Math.floor(Date.now() / 1000)) {

@@ -1,5 +1,5 @@
 import { and, desc, eq, like, or } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { events, orders, tickets } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { Badge, Card, EmptyState, Input } from "@/components/ui";
@@ -15,11 +15,11 @@ export default async function AttendeesPage({
   const { q = "" } = await searchParams;
   const organizer = await requireOrganizer();
 
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) return null;
 
   const filters = [eq(tickets.eventId, id)];
@@ -41,7 +41,7 @@ export default async function AttendeesPage({
     .where(and(...filters))
     .orderBy(desc(tickets.createdAt))
     .limit(500)
-    .all();
+    ;
 
   const checkedIn = rows.filter((r) => r.ticket.status === "checked_in").length;
 

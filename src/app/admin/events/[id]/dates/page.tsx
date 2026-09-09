@@ -1,5 +1,5 @@
 import { and, asc, eq, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { eventDates, events, orders, tickets } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { DatesManager } from "./dates-manager";
@@ -11,11 +11,11 @@ export default async function DatesPage({
 }) {
   const { id } = await params;
   const organizer = await requireOrganizer();
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) return null;
 
   const nights = await db
@@ -23,7 +23,7 @@ export default async function DatesPage({
     .from(eventDates)
     .where(eq(eventDates.eventId, id))
     .orderBy(asc(eventDates.sortOrder), asc(eventDates.startsAt))
-    .all();
+    ;
 
   const sold = await db
     .select({
@@ -33,7 +33,7 @@ export default async function DatesPage({
     .from(tickets)
     .where(and(eq(tickets.eventId, id), sql`${tickets.status} != 'cancelled'`))
     .groupBy(tickets.showDateId)
-    .all();
+    ;
 
   const revenue = await db
     .select({
@@ -43,7 +43,7 @@ export default async function DatesPage({
     .from(orders)
     .where(and(eq(orders.eventId, id), eq(orders.status, "paid")))
     .groupBy(orders.showDateId)
-    .all();
+    ;
 
   const soldBy = new Map(sold.map((r) => [r.showDateId ?? "", Number(r.passes)]));
   const grossBy = new Map(revenue.map((r) => [r.showDateId ?? "", Number(r.gross)]));

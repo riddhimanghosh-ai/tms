@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { events, scans, tickets } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { Badge, Card, SectionTitle } from "@/components/ui";
@@ -12,14 +12,14 @@ export default async function CheckinPage({
 }) {
   const { id } = await params;
   const organizer = await requireOrganizer();
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) return null;
 
-  const counts = await db
+  const counts = await first(db
     .select({
       expected: sql<number>`coalesce(sum(${tickets.admitsCount}), 0)`,
       inside: sql<number>`coalesce(sum(case when ${tickets.inside} = 1 then ${tickets.admitsCount} else 0 end), 0)`,
@@ -27,7 +27,7 @@ export default async function CheckinPage({
     })
     .from(tickets)
     .where(and(eq(tickets.eventId, id), sql`${tickets.status} != 'cancelled'`))
-    .get();
+    );
 
   const recent = await db
     .select({ scan: scans, ticket: tickets })
@@ -36,7 +36,7 @@ export default async function CheckinPage({
     .where(eq(scans.eventId, id))
     .orderBy(desc(scans.at))
     .limit(15)
-    .all();
+    ;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_360px]">

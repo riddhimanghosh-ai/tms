@@ -1,5 +1,5 @@
 import { and, eq, isNull, or, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import {
   discountCodes,
   orders,
@@ -55,12 +55,12 @@ function codeIsLive(c: { startsAt: number | null; endsAt: number | null; active:
   return true;
 }
 
-export function lookupDiscountCode(
+export async function lookupDiscountCode(
   organizerId: string,
   eventId: string,
   code: string,
-): DiscountCode | undefined {
-  return db
+): Promise<DiscountCode | undefined> {
+  return await first(db
     .select()
     .from(discountCodes)
     .where(
@@ -70,15 +70,15 @@ export function lookupDiscountCode(
         or(isNull(discountCodes.eventId), eq(discountCodes.eventId, eventId)),
       ),
     )
-    .get();
+    );
 }
 
-export function lookupReferralCode(
+export async function lookupReferralCode(
   organizerId: string,
   eventId: string,
   code: string,
-): ReferralCode | undefined {
-  return db
+): Promise<ReferralCode | undefined> {
+  return await first(db
     .select()
     .from(referralCodes)
     .where(
@@ -88,22 +88,22 @@ export function lookupReferralCode(
         or(isNull(referralCodes.eventId), eq(referralCodes.eventId, eventId)),
       ),
     )
-    .get();
+    );
 }
 
 /**
  * The single source of truth for what a cart costs. The checkout UI and the
  * order-creation path both call this, so a tampered client price can't stick.
  */
-export function quoteCart(args: {
+export async function quoteCart(args: {
   event: Event;
   lines: CartLine[];
   code?: string | null;
   buyerPhone?: string | null;
-}): Quote {
+}): Promise<Quote> {
   const { event, code, buyerPhone } = args;
 
-  const zoneRows = db.select().from(zones).where(eq(zones.eventId, event.id)).all();
+  const zoneRows = await db.select().from(zones).where(eq(zones.eventId, event.id));
   const byId = new Map<string, Zone>(zoneRows.map((z) => [z.id, z]));
 
   const lines = args.lines
@@ -134,13 +134,13 @@ export function quoteCart(args: {
 
   if (code?.trim()) {
     const trimmed = code.trim();
-    const discount = lookupDiscountCode(event.organizerId, event.id, trimmed);
+    const discount = await lookupDiscountCode(event.organizerId, event.id, trimmed);
     const referral = discount
       ? undefined
-      : lookupReferralCode(event.organizerId, event.id, trimmed);
+      : await lookupReferralCode(event.organizerId, event.id, trimmed);
 
     if (discount) {
-      const err = validateDiscount(discount, quote, buyerPhone);
+      const err = await validateDiscount(discount, quote, buyerPhone);
       if (err) quote.codeError = err;
       else {
         // A zone-scoped code only discounts that zone's share of the cart.
@@ -196,11 +196,11 @@ export function quoteCart(args: {
   return quote;
 }
 
-function validateDiscount(
+async function validateDiscount(
   c: DiscountCode,
   quote: Quote,
   buyerPhone?: string | null,
-): string | null {
+): Promise<string | null> {
   if (!codeIsLive(c)) return "That code has expired or is not active yet.";
   if (c.maxRedemptions != null && c.usedCount >= c.maxRedemptions)
     return "That code has been fully redeemed.";
@@ -210,7 +210,7 @@ function validateDiscount(
     return `This code applies to orders above ₹${Math.round(c.minOrderMinor / 100)}.`;
 
   if (buyerPhone) {
-    const used = db
+    const used = await first(db
       .select({ n: sql<number>`count(*)` })
       .from(orders)
       .where(
@@ -220,7 +220,7 @@ function validateDiscount(
           eq(orders.status, "paid"),
         ),
       )
-      .get();
+      );
     if (Number(used?.n ?? 0) >= c.maxPerBuyer)
       return "You've already used this code.";
   }

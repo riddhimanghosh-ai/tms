@@ -15,8 +15,9 @@ a competitor's event.
 
 ```bash
 pnpm install
-pnpm db:push      # create the SQLite schema
-pnpm db:seed      # demo organiser, 2 events, codes, 3 weeks of sales
+vercel env pull .env.local --yes   # DATABASE_URL from the Neon integration
+pnpm db:push                       # create the schema
+pnpm db:seed                       # demo organiser, 3 events, 3 weeks of sales
 pnpm dev
 ```
 
@@ -34,9 +35,11 @@ Open http://localhost:3000
 The Navratri demo runs **nine nights**, so the buyer picks a night before
 picking passes, and the "Season Pass" category covers all nine at once.
 
-`pnpm db:reset` wipes the database and re-seeds it.
+`pnpm db:reset` re-pushes the schema and re-seeds.
 `pnpm check:booking` exercises the booking core — pricing, codes, holds,
-oversell and seat-clash protection — against the real database.
+oversell, seat-clash and per-night inventory — against the real database.
+`pnpm check:browser` drives a real Chromium through sign-in, the admin tabs,
+a full purchase, and a scan-in / scan-out / cooldown cycle at the gate.
 
 ---
 
@@ -245,9 +248,20 @@ adding Cashfree or PhonePe is one more branch in that file.
 
 ### Database
 
-SQLite via Drizzle, so the whole thing runs from a single file with no services
-to start. The schema is ordinary relational SQL — moving to Postgres is a
-dialect change in `src/db/schema.ts` and `drizzle.config.ts`, not a rewrite.
+Postgres (Neon, provisioned through the Vercel Marketplace) via Drizzle, using
+the WebSocket pool rather than the HTTP driver — the HTTP driver can't do
+transactions, and overselling protection depends on them.
+
+Two things are worth knowing if you touch queries:
+
+- **Postgres matches `GROUP BY` expressions textually**, and a bound parameter
+  never matches another bound parameter. The daily-sales bucket writes `86400`
+  inline for that reason.
+- **Columns from joined tables must be grouped explicitly.** Grouping by a
+  primary key only covers that table's own columns.
+
+Seeding inserts in chunks of 400 rows. A per-row insert loop is fine against a
+local file and turns into a twenty-minute job across a network.
 
 ---
 
@@ -263,6 +277,7 @@ Worth knowing before this goes in front of a paying organiser:
   the seats; the actual refund is issued in the payment gateway.
 - **One login per organiser.** No staff accounts or roles; the gate PIN exists
   in the schema but the scanner currently sits behind the organiser login.
-- **Seat holds assume a single node.** Correct for one server; a multi-instance
-  deployment needs the holds moved to Postgres or Redis.
+- **Seat holds are rows in Postgres**, so they survive a restart and are shared
+  across instances. They're reaped lazily on the next availability read rather
+  than by a scheduled job.
 - **No rate limiting** on checkout or code-guessing.

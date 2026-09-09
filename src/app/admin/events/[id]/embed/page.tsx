@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { and, eq } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { events } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { EmbedPanel } from "./embed-panel";
@@ -12,11 +12,11 @@ export default async function EmbedPage({
 }) {
   const { id } = await params;
   const organizer = await requireOrganizer();
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) return null;
 
   // The snippets must carry a real absolute URL, so read the host we're served on.

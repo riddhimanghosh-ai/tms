@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { events } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { SettingsForm } from "./settings-form";
@@ -11,11 +11,11 @@ export default async function SettingsPage({
 }) {
   const { id } = await params;
   const organizer = await requireOrganizer();
-  const event = await db
+  const event = await first(db
     .select()
     .from(events)
     .where(and(eq(events.id, id), eq(events.organizerId, organizer.id)))
-    .get();
+    );
   if (!event) return null;
 
   return <SettingsForm event={event} />;

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { db } from "@/db";
+import { db, first } from "@/db";
 import { events, orders, organizers, tickets } from "@/db/schema";
 import { formatMinor } from "@/lib/money";
 import { qrSvg } from "@/lib/qr";
@@ -15,13 +15,13 @@ export default async function OrderPage({
 }) {
   const { publicId } = await params;
 
-  const row = await db
+  const row = await first(db
     .select({ order: orders, event: events, organizer: organizers })
     .from(orders)
     .innerJoin(events, eq(events.id, orders.eventId))
     .innerJoin(organizers, eq(organizers.id, orders.organizerId))
     .where(eq(orders.publicId, publicId))
-    .get();
+    );
   if (!row) notFound();
 
   const { order, event, organizer } = row;
@@ -29,7 +29,7 @@ export default async function OrderPage({
     .select()
     .from(tickets)
     .where(eq(tickets.orderId, order.id))
-    .all();
+    ;
 
   const qrs = await Promise.all(ticketRows.map((t) => qrSvg(t.code)));
   const start = new Date(event.startsAt * 1000);
