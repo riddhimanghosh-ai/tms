@@ -63,6 +63,7 @@ export default async function EmbedPage({
           initialCode={ref ?? code ?? null}
           channel="embed"
           supportPhone={organizer.supportPhone}
+          dockedCta={false}
         />
       </div>
     </div>

@@ -73,7 +73,7 @@ export default async function EventOverview({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 [&>*]:min-w-0 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label="Tickets sold"
           value={stats.totals.tickets.toLocaleString("en-IN")}
@@ -110,7 +110,7 @@ export default async function EventOverview({
         <TrendChart points={stats.daily} format="moneyShort" valueLabel="Gross sales" />
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 [&>*]:min-w-0 lg:grid-cols-2">
         <Card className="p-5">
           <SectionTitle title="Top ticket types" hint="Share of revenue by category." />
           <BarList
@@ -139,7 +139,7 @@ export default async function EventOverview({
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 [&>*]:min-w-0 lg:grid-cols-2">
         <Card className="p-5">
           <SectionTitle title="How full each category is" hint="Raise prices on what's nearly gone." />
           <SellThrough
@@ -179,7 +179,7 @@ export default async function EventOverview({
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 [&>*]:min-w-0 lg:grid-cols-2">
         <Card className="p-5">
           <SectionTitle title="Promoter leaderboard" hint="Sales driven and commission owed." />
           {stats.referrals.length === 0 ? (

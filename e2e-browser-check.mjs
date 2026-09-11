@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const BASE = "http://localhost:3100";
+const BASE = process.env.BASE_URL ?? "http://localhost:3100";
 const results = [];
 const ok = (name, detail = "") => results.push(["PASS", name, detail]);
 const bad = (name, detail = "") => results.push(["FAIL", name, detail]);
@@ -49,8 +49,15 @@ try {
     ["Settings", "Gate & re-entry"],
   ]) {
     await page.click(`nav a:has-text("${tab}")`);
-    await page.waitForTimeout(2500);
-    const found = await page.locator(`text=${marker}`).first().count();
+    // Wait for the marker itself rather than a fixed sleep — a tab like Orders
+    // grows slower to render as the seed data grows, and a timer races it.
+    let found = 0;
+    try {
+      await page.locator(`text=${marker}`).first().waitFor({ timeout: 15000 });
+      found = 1;
+    } catch {
+      found = 0;
+    }
     found ? ok(`tab: ${tab}`) : bad(`tab: ${tab}`, `no "${marker}"`);
   }
 
@@ -80,13 +87,16 @@ try {
   await page.locator('button[aria-label^="Add one"]').first().click();
   await page.waitForTimeout(2500);
 
-  const total = await page.locator('button:has-text("Continue")').innerText();
+  // The CTA exists twice — inline for desktop, docked for phones — and only
+  // one is visible at a given width, so target the visible one.
+  const continueBtn = page.locator('button:has-text("Continue")').locator("visible=true").first();
+  const total = await continueBtn.innerText();
   total.includes("₹") ? ok("cart prices server-side", total.trim()) : bad("cart price", total);
 
-  await page.click('button:has-text("Continue")');
+  await continueBtn.click();
   await page.fill('input[name="name"]', "Playwright Buyer");
   await page.fill('input[name="phone"]', "+919812345678");
-  await page.click('button:has-text("Pay")');
+  await page.locator('button:has-text("Pay")').locator("visible=true").first().click();
   await page.waitForURL(/\/pay\//, { timeout: 40000 });
   ok("checkout reaches payment");
 

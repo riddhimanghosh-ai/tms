@@ -57,6 +57,7 @@ export function BookingWidget({
   channel,
   supportPhone,
   stage,
+  dockedCta = true,
 }: {
   event: {
     id: string;
@@ -77,6 +78,12 @@ export function BookingWidget({
   channel: string;
   supportPhone?: string | null;
   stage: StageConfig;
+  /**
+   * Docks the price + CTA to the bottom of the phone viewport. Off inside an
+   * embed, where `fixed` would pin the bar to the iframe rather than the page
+   * the buyer is actually looking at.
+   */
+  dockedCta?: boolean;
 }) {
   const seated = event.layoutType === "seated";
   const multiNight = nights.length > 1;
@@ -183,7 +190,11 @@ export function BookingWidget({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div
+      className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${
+        dockedCta ? "pb-24 lg:pb-0" : ""
+      }`}
+    >
       <div className="border-b border-slate-100 px-5 py-4">
         <div className="flex items-center gap-2">
           <p className="text-sm font-semibold text-slate-900">
@@ -290,24 +301,44 @@ export function BookingWidget({
                         </span>
                       ) : (
                         <div className="flex items-center gap-1 rounded-lg border border-slate-200">
+                          {/*
+                            Both handlers read the previous state rather than
+                            the render's `n`: two quick taps on a phone fire
+                            before React re-renders, and a stale closure would
+                            silently drop the second one.
+                          */}
                           <button
                             type="button"
                             aria-label={`Remove one ${z.name}`}
                             disabled={n === 0}
-                            onClick={() => setQty({ ...qty, [z.id]: Math.max(0, n - 1) })}
-                            className="grid size-9 place-items-center rounded-l-lg text-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+                            onClick={() =>
+                              setQty((prev) => ({
+                                ...prev,
+                                [z.id]: Math.max(0, (prev[z.id] ?? 0) - 1),
+                              }))
+                            }
+                            className="press grid size-10 place-items-center rounded-l-lg text-xl text-slate-600 hover:bg-slate-50 disabled:opacity-30"
                           >
                             −
                           </button>
-                          <span className="w-8 text-center text-sm font-medium tabular-nums text-slate-900">
+                          <span className="w-8 text-center text-sm font-semibold tabular-nums text-slate-900">
                             {n}
                           </span>
                           <button
                             type="button"
                             aria-label={`Add one ${z.name}`}
                             disabled={n >= maxHere || atLimit}
-                            onClick={() => setQty({ ...qty, [z.id]: n + 1 })}
-                            className="grid size-9 place-items-center rounded-r-lg text-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30"
+                            onClick={() =>
+                              setQty((prev) => {
+                                const current = prev[z.id] ?? 0;
+                                const booked = Object.values(prev).reduce((a, b) => a + b, 0);
+                                const roomInZone = Math.min(z.maxPerOrder, z.available) - current;
+                                const roomInOrder = event.maxTicketsPerOrder - booked;
+                                if (roomInZone <= 0 || roomInOrder <= 0) return prev;
+                                return { ...prev, [z.id]: current + 1 };
+                              })
+                            }
+                            className="press grid size-10 place-items-center rounded-r-lg text-xl text-slate-600 hover:bg-slate-50 disabled:opacity-30"
                           >
                             +
                           </button>
@@ -339,7 +370,9 @@ export function BookingWidget({
             type="button"
             disabled={ticketCount === 0}
             onClick={() => setStep("details")}
-            className="w-full rounded-xl px-4 py-3.5 text-base font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+            className={`press w-full rounded-xl px-4 py-3.5 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 ${
+              dockedCta ? "hidden lg:block" : ""
+            }`}
             style={{ background: brandColor }}
           >
             {ticketCount === 0
@@ -351,6 +384,7 @@ export function BookingWidget({
         </div>
       ) : (
         <form
+          id="rasana-checkout"
           className="space-y-4 p-5"
           onSubmit={async (e) => {
             e.preventDefault();
@@ -429,7 +463,9 @@ export function BookingWidget({
 
           <button
             disabled={submitting}
-            className="w-full rounded-xl px-4 py-3.5 text-base font-semibold text-white transition disabled:opacity-60"
+            className={`press w-full rounded-xl px-4 py-3.5 text-base font-semibold text-white disabled:opacity-60 ${
+              dockedCta ? "hidden lg:block" : ""
+            }`}
             style={{ background: brandColor }}
           >
             {submitting ? "Taking you to payment…" : `Pay ${formatMinor(shownQuote?.totalMinor ?? 0)}`}
@@ -450,6 +486,57 @@ export function BookingWidget({
           ) : null}
         </form>
       )}
+
+      {/*
+        The phone's docked bar. A buyer scrolling a nine-night picker or a
+        thousand-seat map should never have to hunt for the total or the
+        button — both ride the bottom of the screen.
+      */}
+      {dockedCta ? (
+        <div className="sticky-cta fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pt-3 backdrop-blur lg:hidden">
+          <div className="mx-auto flex max-w-5xl items-center gap-3">
+            <div className="min-w-0 shrink-0">
+              {ticketCount > 0 ? (
+                <>
+                  <p className="text-[11px] leading-tight text-slate-500">
+                    {ticketCount} ticket{ticketCount > 1 ? "s" : ""}
+                    {pending ? " · updating…" : ""}
+                  </p>
+                  <p className="text-lg font-bold leading-tight tabular-nums text-slate-900">
+                    {formatMinor(shownQuote?.totalMinor ?? 0)}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm leading-tight text-slate-500">
+                  {multiNight && !nightId ? "Pick a night" : "No passes yet"}
+                </p>
+              )}
+            </div>
+
+            {step === "select" ? (
+              <button
+                type="button"
+                disabled={ticketCount === 0}
+                onClick={() => setStep("details")}
+                className="press ml-auto flex-1 rounded-xl px-5 py-3.5 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ background: brandColor }}
+              >
+                {ticketCount === 0 ? "Select passes" : "Continue"}
+              </button>
+            ) : (
+              <button
+                type="submit"
+                form="rasana-checkout"
+                disabled={submitting}
+                className="press ml-auto flex-1 rounded-xl px-5 py-3.5 text-base font-semibold text-white disabled:opacity-60"
+                style={{ background: brandColor }}
+              >
+                {submitting ? "Please wait…" : "Pay now"}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -466,7 +466,7 @@ function ZoneForm({
               </p>
             </div>
 
-            <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+            <div className="grid gap-5 [&>*]:min-w-0 lg:grid-cols-[1fr_320px]">
               <div className="space-y-4">
                 {shape === "grid" ? (
                   <div className="grid gap-4 sm:grid-cols-3">

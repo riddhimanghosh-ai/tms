@@ -40,7 +40,7 @@ export default async function CheckinPage({
     ;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+    <div className="grid gap-6 [&>*]:min-w-0 lg:grid-cols-[1fr_360px]">
       <Scanner
         eventId={id}
         inside={Number(counts?.inside ?? 0)}

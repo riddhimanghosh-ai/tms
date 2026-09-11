@@ -74,3 +74,118 @@ input[type="number"]::-webkit-outer-spin-button {
     0 1px 2px rgb(23 19 37 / 0.04),
     0 8px 24px -12px rgb(23 19 37 / 0.12);
 }
+
+/* Lifted elevation for cards that are the primary thing on screen. */
+.card-shadow-lg {
+  box-shadow:
+    0 1px 2px rgb(23 19 37 / 0.04),
+    0 4px 12px -4px rgb(23 19 37 / 0.08),
+    0 24px 48px -24px rgb(23 19 37 / 0.18);
+}
+
+/*
+ * A listing card that lifts on pointer hover. Written in CSS rather than as
+ * `hover:` utilities because the elevation is a bespoke shadow, and Tailwind
+ * variants only compose onto utilities.
+ */
+.card-lift {
+  transition:
+    transform 200ms cubic-bezier(0.2, 0, 0.2, 1),
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+@media (hover: hover) {
+  .card-lift:hover {
+    transform: translateY(-4px);
+    border-color: var(--color-ink-600);
+    box-shadow:
+      0 1px 2px rgb(23 19 37 / 0.04),
+      0 4px 12px -4px rgb(23 19 37 / 0.08),
+      0 24px 48px -24px rgb(23 19 37 / 0.18);
+  }
+}
+.card-lift:active {
+  transform: translateY(-1px);
+}
+
+/*
+ * Horizontal chip rows (cities, nights, blocks) are a scroll affordance on a
+ * phone and a plain row on a desktop. The bar itself is noise on touch.
+ */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * The mobile booking bar. Docked to the bottom of the viewport, clear of the
+ * home indicator on notched phones — a buyer should never have to scroll to
+ * find the price or the button.
+ */
+.sticky-cta {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/* Tap feedback that doesn't rely on :hover, which phones don't have. */
+@media (hover: none) {
+  .press:active {
+    transform: scale(0.985);
+  }
+}
+.press {
+  transition:
+    transform 140ms cubic-bezier(0.2, 0, 0.2, 1),
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* One visible focus treatment everywhere, for keyboard users only. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-ink-800);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent);
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.rise {
+  animation: rise 260ms cubic-bezier(0.2, 0, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

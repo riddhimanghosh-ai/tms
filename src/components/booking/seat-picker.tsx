@@ -29,7 +29,8 @@ export function SeatPicker({
   max: number;
   stage: StageConfig;
   initialZoneId?: string | null;
-  onChange: (next: string[]) => void;
+  /** Takes an updater so rapid taps queue instead of overwriting each other. */
+  onChange: (next: string[] | ((prev: string[]) => string[])) => void;
 }) {
   const withSeats = zones.filter((z) => (seatsByZone.get(z.id)?.length ?? 0) > 0);
   const preferred =
@@ -44,9 +45,16 @@ export function SeatPicker({
   const zone = withSeats.find((z) => z.id === chosenId) ?? preferred;
   if (!zone) return <p className="text-sm text-slate-500">No seats configured yet.</p>;
 
+  // Reads the previous selection rather than this render's `selected`: tapping
+  // two seats in quick succession fires both handlers before React re-renders.
   const toggle = (seatId: string) => {
-    if (selected.includes(seatId)) onChange(selected.filter((s) => s !== seatId));
-    else if (selected.length < max) onChange([...selected, seatId]);
+    onChange((prev) =>
+      prev.includes(seatId)
+        ? prev.filter((s) => s !== seatId)
+        : prev.length < max
+          ? [...prev, seatId]
+          : prev,
+    );
   };
 
   const allSeats = [...seatsByZone.values()].flat();
@@ -140,7 +148,7 @@ export function SeatPicker({
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+        <div className="relative rounded-xl border border-slate-200 bg-slate-50 p-2">
           <SeatMap
             zone={zone}
             seats={mapSeats}
@@ -149,9 +157,13 @@ export function SeatPicker({
             mode="select"
             theme="light"
             stage={stage}
-            maxHeight={400}
+            maxHeight={460}
+            zoomable
           />
         </div>
+        <p className="mt-1.5 text-center text-xs text-slate-400">
+          Pinch or use + to zoom in, then drag to move around the map.
+        </p>
 
         <div className="mt-2">
           <SeatLegend color={zone.color} theme="light" showSelected layers={layers} />
@@ -170,7 +182,7 @@ export function SeatPicker({
                 <li key={s.id}>
                   <button
                     type="button"
-                    onClick={() => onChange(selected.filter((id) => id !== s.id))}
+                    onClick={() => onChange((prev) => prev.filter((id) => id !== s.id))}
                     className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs hover:border-slate-500"
                     title="Remove this seat"
                   >

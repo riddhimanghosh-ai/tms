@@ -205,7 +205,7 @@ export function SettingsForm({ event }: { event: Event }) {
           <input type="hidden" name="stagePosition" value={stagePosition} />
           <input type="hidden" name="stageShape" value={stageShape} />
 
-          <div className="grid gap-5 lg:grid-cols-[1fr_260px]">
+          <div className="grid gap-5 [&>*]:min-w-0 lg:grid-cols-[1fr_260px]">
             <div className="space-y-4">
               <Field label="What is it called?">
                 <Input

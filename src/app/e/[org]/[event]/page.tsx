@@ -123,32 +123,89 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
       />
 
       <header
-        className="relative"
+        className="relative isolate overflow-hidden"
         style={{
           background: event.coverImageUrl
-            ? `linear-gradient(180deg, rgba(10,8,15,.5), rgba(10,8,15,.9)), url(${event.coverImageUrl}) center/cover`
+            ? `url(${event.coverImageUrl}) center/cover`
             : `linear-gradient(140deg, ${organizer.brandColor}, #16121f 72%)`,
         }}
       >
-        <div className="mx-auto max-w-5xl px-5 py-14 sm:py-20">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-white/70">
+        {/* Two stacked washes: one to seat the text, one to land the page below. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(10,8,15,.42) 0%, rgba(10,8,15,.62) 45%, rgba(10,8,15,.94) 100%)",
+          }}
+        />
+        <div className="mx-auto max-w-5xl px-5 py-12 sm:py-20">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-white/70 sm:text-sm">
             {organizer.name}
           </p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-6xl">
+          <h1 className="mt-3 max-w-3xl text-[2.1rem] font-bold leading-[1.06] tracking-tight text-white sm:text-6xl">
             {event.title}
           </h1>
           {event.tagline ? (
-            <p className="mt-4 max-w-2xl text-lg leading-relaxed text-white/85">{event.tagline}</p>
+            <p className="mt-3 max-w-2xl text-base leading-relaxed text-white/85 sm:mt-4 sm:text-lg">
+              {event.tagline}
+            </p>
           ) : null}
 
-          <div className="mt-8 max-w-md">
+          {/* The three facts a buyer scans for before anything else. */}
+          <ul className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-white/90">
+            <li className="flex items-center gap-1.5">
+              <svg aria-hidden viewBox="0 0 16 16" className="size-4 shrink-0 opacity-80">
+                <rect x="2" y="3.2" width="12" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M2 6.5h12M5.5 1.8v2.6M10.5 1.8v2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+              {multiNight && firstNight && lastNight
+                ? `${dayMonth(firstNight.startsAt)} – ${dayMonth(lastNight.startsAt)} · ${nights.length} nights`
+                : start.toLocaleDateString("en-IN", {
+                    timeZone: EVENT_TZ,
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                  })}
+            </li>
+            <li className="flex items-center gap-1.5">
+              <svg aria-hidden viewBox="0 0 16 16" className="size-4 shrink-0 opacity-80">
+                <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M8 4.6V8l2.2 1.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+              {new Date((event.doorsOpenAt ?? event.startsAt) * 1000).toLocaleTimeString("en-IN", {
+                timeZone: EVENT_TZ,
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </li>
+            {event.venue ? (
+              <li className="flex min-w-0 items-center gap-1.5">
+                <svg aria-hidden viewBox="0 0 16 16" className="size-4 shrink-0 opacity-80">
+                  <path
+                    d="M8 1.5c-2.3 0-4.2 1.9-4.2 4.2C3.8 9 8 14.5 8 14.5s4.2-5.5 4.2-8.8c0-2.3-1.9-4.2-4.2-4.2Z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                  />
+                  <circle cx="8" cy="5.7" r="1.4" fill="currentColor" />
+                </svg>
+                <span className="truncate">
+                  {event.venue}
+                  {event.city ? `, ${event.city}` : ""}
+                </span>
+              </li>
+            ) : null}
+          </ul>
+
+          <div className="mt-7 max-w-md sm:mt-8">
             <Countdown targetSec={firstNight?.startsAt ?? event.startsAt} tone="dark" label={multiNight ? "Next night in" : "Doors open in"} />
           </div>
 
-          <div className="mt-8 flex flex-wrap items-center gap-4">
+          <div className="mt-7 flex flex-wrap items-center gap-4 sm:mt-8">
             <Link
               href={bookHref}
-              className="rounded-xl px-7 py-4 text-base font-semibold text-white shadow-lg transition hover:brightness-110"
+              className="press rounded-xl px-7 py-4 text-base font-semibold text-white shadow-lg hover:brightness-110"
               style={{ background: organizer.brandColor }}
             >
               {onSale ? "Book tickets" : "Tickets coming soon"}
@@ -189,15 +246,8 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
 
       <div className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-5xl px-5 py-5">
-          <Link
-            href={bookHref}
-            className="block w-full rounded-2xl px-6 py-4 text-center text-lg font-semibold text-white shadow-lg transition hover:brightness-110 lg:hidden"
-            style={{ background: organizer.brandColor }}
-          >
-            {onSale ? "Book Now" : "Tickets coming soon"}
-          </Link>
-
-          <dl className="mt-5 grid grid-cols-3 gap-4 lg:mt-0">
+          {/* On mobile the docked bar at the bottom already carries the CTA. */}
+          <dl className="grid grid-cols-3 gap-4">
             {proof.map((pItem) => (
               <div key={pItem.label} className="text-center">
                 <dt className="sr-only">{pItem.label}</dt>
@@ -337,10 +387,18 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
               return (
                 <li
                   key={z.id}
-                  className={`rounded-2xl border p-5 transition ${
-                    z.soldOut ? "border-slate-200 bg-slate-50" : "border-slate-200 bg-white hover:border-slate-300"
+                  className={`relative overflow-hidden rounded-2xl border p-5 transition ${
+                    z.soldOut
+                      ? "border-slate-200 bg-slate-50"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-md"
                   }`}
                 >
+                  {/* The tier's colour, carried through from the seat map. */}
+                  <span
+                    aria-hidden
+                    className="absolute inset-y-0 left-0 w-1"
+                    style={{ background: z.soldOut ? "#cbd5e1" : z.color }}
+                  />
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-900">
@@ -386,7 +444,8 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
                     {!z.soldOut ? (
                       <Link
                         href={bookZoneHref(z.id)}
-                        className="rounded-lg border border-slate-300 px-3.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        className="press rounded-lg px-4 py-2 text-sm font-semibold text-white"
+                        style={{ background: organizer.brandColor }}
                       >
                         {event.layoutType === "seated" ? "Choose seats" : "Book"}
                       </Link>
@@ -454,17 +513,17 @@ export default async function EventLandingPage({ params, searchParams }: Props) 
       </main>
 
       {/* Mobile: the CTA follows the reader down the page. */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 backdrop-blur lg:hidden">
+      <div className="sticky-cta fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-3 pt-3 backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-5xl items-center gap-3">
-          <div className="min-w-0">
-            <p className="text-xs text-slate-500">From</p>
-            <p className="font-semibold text-slate-900">
+          <div className="min-w-0 shrink-0">
+            <p className="text-[11px] leading-tight text-slate-500">From</p>
+            <p className="text-lg font-bold leading-tight text-slate-900">
               {cheapest ? formatMinor(cheapest.priceMinor) : "Sold out"}
             </p>
           </div>
           <Link
             href={bookHref}
-            className="ml-auto flex-1 rounded-xl px-5 py-3.5 text-center text-base font-semibold text-white"
+            className="press ml-auto flex-1 rounded-xl px-5 py-3.5 text-center text-base font-semibold text-white shadow-sm"
             style={{ background: organizer.brandColor }}
           >
             {onSale ? "Book tickets" : "See options"}

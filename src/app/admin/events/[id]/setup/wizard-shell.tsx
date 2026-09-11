@@ -94,7 +94,7 @@ export function WizardShell({
         </ol>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[220px_1fr] lg:items-start">
+      <div className="grid gap-6 [&>*]:min-w-0 lg:grid-cols-[220px_1fr] lg:items-start">
         <nav className="rounded-[--radius-card] border border-ink-700 bg-white p-2 card-shadow lg:sticky lg:top-32">
           <ul className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
             {SETUP_STEPS.map((step) => {

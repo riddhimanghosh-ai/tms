@@ -78,11 +78,14 @@ export function SeatMap({
   theme = "dark",
   stage = DEFAULT_STAGE,
   maxHeight = 460,
+  zoomable = false,
 }: {
   zone: MapZone;
   seats: MapSeat[];
   selected?: string[];
   onToggle?: (seatId: string) => void;
+  /** Adds zoom controls and lets the map scroll past its container. */
+  zoomable?: boolean;
   /** edit: click blocks/unblocks. select: click picks a seat to buy. */
   mode: "edit" | "select";
   theme?: "dark" | "light";
@@ -91,6 +94,7 @@ export function SeatMap({
 }) {
   const c = PALETTE[theme];
   const [hover, setHover] = useState<MapSeat | null>(null);
+  const [zoom, setZoom] = useState(1);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const isRing = zone.shape !== "grid";
   const colors = zone.layerColors ?? [];
@@ -145,10 +149,14 @@ export function SeatMap({
 
   return (
     <div className="relative">
+      <div
+        className={zoomable ? "no-scrollbar overflow-auto overscroll-contain" : undefined}
+        style={zoomable ? { maxHeight } : undefined}
+      >
       <svg
         viewBox={`0 0 ${VIEW} ${VIEW}`}
-        className="w-full"
-        style={{ maxHeight }}
+        className={zoomable ? "block" : "w-full"}
+        style={zoomable ? { width: `${zoom * 100}%` } : { maxHeight }}
         role="group"
         aria-label={`Seat map, ${seats.length} seats`}
         onMouseLeave={() => setHover(null)}
@@ -259,6 +267,38 @@ export function SeatMap({
           );
         })}
       </svg>
+      </div>
+
+      {/*
+        Ring seats get small fast, and a 7px target is not a thumb target.
+        Zooming scales the SVG past its container and the wrapper scrolls,
+        which also gives native two-finger panning on a phone.
+      */}
+      {zoomable ? (
+        <div className="absolute bottom-2 right-2 flex overflow-hidden rounded-lg border border-slate-200 bg-white/95 backdrop-blur">
+          <button
+            type="button"
+            aria-label="Zoom out"
+            disabled={zoom <= 1}
+            onClick={() => setZoom((z) => Math.max(1, Math.round((z - 0.6) * 10) / 10))}
+            className="press grid size-9 place-items-center text-lg text-slate-600 disabled:opacity-30"
+          >
+            −
+          </button>
+          <span className="grid w-11 place-items-center border-x border-slate-200 text-xs font-medium tabular-nums text-slate-500">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            aria-label="Zoom in"
+            disabled={zoom >= 3.4}
+            onClick={() => setZoom((z) => Math.min(3.4, Math.round((z + 0.6) * 10) / 10))}
+            className="press grid size-9 place-items-center text-lg text-slate-600 disabled:opacity-30"
+          >
+            +
+          </button>
+        </div>
+      ) : null}
 
       {hover ? (
         <div

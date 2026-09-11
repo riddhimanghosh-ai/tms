@@ -168,7 +168,7 @@ function OrderDetail({
   const live = order.status === "paid";
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_260px]">
+    <div className="grid gap-5 [&>*]:min-w-0 lg:grid-cols-[1fr_260px]">
       <div>
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-400">
           Passes ({detail.passes.length})

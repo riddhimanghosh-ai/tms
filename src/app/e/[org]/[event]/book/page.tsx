@@ -48,7 +48,7 @@ export default async function BookPage({ params, searchParams }: Props) {
 
       <main className="mx-auto grid max-w-5xl gap-8 px-5 py-8 lg:grid-cols-[340px_1fr] lg:items-start">
         {/* Context rail — keeps the buyer oriented while they pick. */}
-        <aside className="space-y-4 lg:sticky lg:top-20">
+        <aside className="min-w-0 space-y-4 lg:sticky lg:top-20">
           <div className="rounded-2xl border border-slate-200 bg-white p-5">
             <h1 className="text-lg font-semibold tracking-tight text-slate-900">{event.title}</h1>
             <p className="mt-1 text-sm text-slate-500">
@@ -116,7 +116,7 @@ export default async function BookPage({ params, searchParams }: Props) {
           ) : null}
         </aside>
 
-        <div>
+        <div className="min-w-0">
           <BookingWidget
             event={{
               id: event.id,
