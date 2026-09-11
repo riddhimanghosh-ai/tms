@@ -1,8 +1,8 @@
-import { headers } from "next/headers";
 import { and, eq } from "drizzle-orm";
 import { db, first } from "@/db";
 import { events } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
+import { canonicalOrigin } from "@/lib/site-url";
 import { EmbedPanel } from "./embed-panel";
 
 export default async function EmbedPage({
@@ -19,10 +19,9 @@ export default async function EmbedPage({
     );
   if (!event) return null;
 
-  // The snippets must carry a real absolute URL, so read the host we're served on.
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  // A snippet is pasted once and left alone for a season, so it has to carry
+  // the durable domain rather than whichever deployment served this page.
+  const origin = await canonicalOrigin();
 
   return (
     <EmbedPanel
@@ -32,7 +31,7 @@ export default async function EmbedPage({
       venue={event.venue}
       startsAt={event.startsAt}
       published={event.status === "published"}
-      origin={`${proto}://${host}`}
+      origin={origin}
     />
   );
 }

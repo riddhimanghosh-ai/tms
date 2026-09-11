@@ -246,6 +246,22 @@ pays. The signature on every callback is verified server-side before a ticket is
 issued. Nothing outside `src/lib/payments.ts` knows which provider is active, so
 adding Cashfree or PhonePe is one more branch in that file.
 
+### The public origin
+
+```bash
+SITE_URL=https://tickets.example.in   # optional
+```
+
+The **Embed & share** tab hands organisers a link and a `<script>` snippet they
+paste into their own site, so those URLs have to keep working long after the
+deployment that generated them is gone. `SITE_URL` is what they carry.
+
+Unset, it falls back to Vercel's production domain for the project, and then to
+the host the page was served on — which is what local development wants. Set it
+once there's a custom domain. It matters most on preview deployments: those have
+a per-deployment URL behind deployment protection, so a snippet copied from one
+would ask the organiser's own visitors to sign in to Vercel.
+
 ### Database
 
 Postgres (Neon, provisioned through the Vercel Marketplace) via Drizzle, using

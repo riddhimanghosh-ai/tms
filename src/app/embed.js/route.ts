@@ -6,8 +6,12 @@
  *
  * Injects an iframe and keeps its height in sync with the booking form.
  */
-export async function GET(request: Request) {
-  const origin = new URL(request.url).origin;
+import { canonicalOrigin } from "@/lib/site-url";
+
+export async function GET() {
+  // Same reasoning as the snippet itself: the iframe must resolve to the
+  // durable domain, not to whichever deployment happened to serve this script.
+  const origin = await canonicalOrigin();
 
   const js = `(function () {
   var script = document.currentScript;
