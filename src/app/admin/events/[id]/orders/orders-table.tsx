@@ -6,7 +6,6 @@ import { cancelOrder, orderDetail } from "@/app/admin/actions";
 import { Badge, Button, Card, cn } from "@/components/ui";
 import { toast } from "@/components/toast";
 import { formatMinor } from "@/lib/money";
-import { useOrigin } from "@/components/use-origin";
 import { dateTime } from "@/lib/datetime";
 
 type Row = {
@@ -37,7 +36,16 @@ const tone = {
   refunded: "neutral",
 } as const;
 
-export function OrdersTable({ rows, eventTitle }: { rows: Row[]; eventTitle: string }) {
+export function OrdersTable({
+  rows,
+  eventTitle,
+  origin,
+}: {
+  rows: Row[];
+  eventTitle: string;
+  /** Resolved on the server so the link a buyer receives outlives this deployment. */
+  origin: string;
+}) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loading, startLoad] = useTransition();
@@ -128,6 +136,7 @@ export function OrdersTable({ rows, eventTitle }: { rows: Row[]; eventTitle: str
                         order={order}
                         detail={detail}
                         eventTitle={eventTitle}
+                        origin={origin}
                         onChanged={() => {
                           setOpenId(null);
                           setDetail(null);
@@ -149,15 +158,16 @@ function OrderDetail({
   order,
   detail,
   eventTitle,
+  origin,
   onChanged,
 }: {
   order: Row;
   detail: Detail;
   eventTitle: string;
+  origin: string;
   onChanged: () => void;
 }) {
   const [pending, start] = useTransition();
-  const origin = useOrigin();
   const orderUrl = `${origin}/order/${order.publicId}`;
 
   const whatsapp = `https://wa.me/${order.buyerPhone.replace(/\D/g, "")}?text=${encodeURIComponent(

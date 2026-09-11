@@ -3,6 +3,7 @@ import { db, first } from "@/db";
 import { discountCodes, events, orderItems, orders, referralCodes } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
 import { EmptyState, Input } from "@/components/ui";
+import { canonicalOrigin } from "@/lib/site-url";
 import { OrdersTable } from "./orders-table";
 
 const STATUSES = ["paid", "pending", "failed", "cancelled", "refunded"];
@@ -103,6 +104,7 @@ export default async function OrdersPage({
       ) : (
         <OrdersTable
           eventTitle={event.title}
+          origin={await canonicalOrigin()}
           rows={rows.map(({ order, items, discountCode, referralCode }) => ({
             id: order.id,
             publicId: order.publicId,

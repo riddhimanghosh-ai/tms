@@ -2,6 +2,7 @@ import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { db, first } from "@/db";
 import { discountCodes, events, orders, referralCodes, zones } from "@/db/schema";
 import { requireOrganizer } from "@/lib/auth";
+import { canonicalOrigin } from "@/lib/site-url";
 import { CodesManager } from "./codes-manager";
 
 export default async function CodesPage({
@@ -51,6 +52,7 @@ export default async function CodesPage({
   return (
     <CodesManager
       eventId={id}
+      origin={await canonicalOrigin()}
       publicBase={`/e/${organizer.slug}/${event.slug}`}
       zones={zoneRows.map((z) => ({ id: z.id, name: z.name }))}
       discounts={discounts}

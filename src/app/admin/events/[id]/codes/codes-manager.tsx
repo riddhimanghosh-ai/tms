@@ -19,7 +19,6 @@ import {
   cn,
 } from "@/components/ui";
 import { formatMinor } from "@/lib/money";
-import { useOrigin } from "@/components/use-origin";
 
 type Discount = {
   id: string;
@@ -60,12 +59,15 @@ type Referral = {
 export function CodesManager({
   eventId,
   publicBase,
+  origin,
   zones,
   discounts,
   referrals,
 }: {
   eventId: string;
   publicBase: string;
+  /** Resolved on the server so a promoter's link outlives this deployment. */
+  origin: string;
   zones: { id: string; name: string }[];
   discounts: Discount[];
   referrals: Referral[];
@@ -205,7 +207,7 @@ export function CodesManager({
                       ? `${r.commissionValue}%`
                       : formatMinor(r.commissionValue)}
                   </p>
-                  <ShareLink url={`${publicBase}?ref=${r.code}`} />
+                  <ShareLink origin={origin} url={`${publicBase}?ref=${r.code}`} />
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" variant="secondary" onClick={() => setEditing(r.id)}>
@@ -236,9 +238,8 @@ export function CodesManager({
   );
 }
 
-function ShareLink({ url }: { url: string }) {
+function ShareLink({ origin, url }: { origin: string; url: string }) {
   const [copied, setCopied] = useState(false);
-  const origin = useOrigin();
   const full = `${origin}${url}`;
   return (
     <button
@@ -250,7 +251,7 @@ function ShareLink({ url }: { url: string }) {
       }}
       className="mt-2 max-w-full truncate rounded bg-ink-850 px-2 py-1 text-left font-mono text-xs text-ink-300 hover:text-ink-50"
     >
-      {copied ? "Copied ✓" : (origin ? full : url)}
+      {copied ? "Copied ✓" : full}
     </button>
   );
 }
