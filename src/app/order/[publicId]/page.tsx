@@ -7,6 +7,7 @@ import { formatMinor } from "@/lib/money";
 import { qrSvg } from "@/lib/qr";
 import { TicketCard } from "@/components/booking/ticket-card";
 import { BuyerNav } from "@/components/booking/buyer-nav";
+import { canonicalOrigin } from "@/lib/site-url";
 import { EVENT_TZ } from "@/lib/datetime";
 
 export default async function OrderPage({
@@ -35,7 +36,24 @@ export default async function OrderPage({
   const qrs = await Promise.all(ticketRows.map((t) => qrSvg(t.code)));
   const start = new Date(event.startsAt * 1000);
 
-  const whatsappText = `My passes for ${event.title} — order ${order.publicId}. View them here:`;
+  // The link is the whole point of the share — without it the message arrives
+  // saying "view them here" and pointing at nothing.
+  const orderUrl = `${await canonicalOrigin()}/order/${order.publicId}`;
+  const whatsappText = `🎟 *${event.title}*
+${event.venue ? `📍 ${event.venue}\n` : ""}🗓 ${start.toLocaleDateString("en-IN", {
+    timeZone: EVENT_TZ,
+    weekday: "short",
+    day: "numeric",
+    month: "long",
+  })}, ${start.toLocaleTimeString("en-IN", {
+    timeZone: EVENT_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+  })}
+
+${ticketRows.length} pass${ticketRows.length > 1 ? "es" : ""} · order ${order.publicId}
+Show the QR at the gate 👇
+${orderUrl}`;
 
   return (
     <div className="surface-light min-h-dvh">
