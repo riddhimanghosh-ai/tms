@@ -244,9 +244,47 @@ export function stageGeometry(
     rotate: 0,
   };
 
-  if (resolved.position === "centre" || resolved.shape === "circle") {
+  // A circle is a circle wherever it sits — including out at an edge.
+  if (resolved.shape === "circle") {
     const r = Math.max(30, Math.min(150, innerRadius * 0.66));
     return { ...base, kind: "circle", cx: CENTRE, cy: CENTRE, r, labelX: CENTRE, labelY: CENTRE + 8 };
+  }
+
+  /*
+   * A centre stage drawn as a bar or a curve — a runway through the middle of
+   * a ground, or a curved screen facing outwards. This used to fall through to
+   * the circle above, so picking "Bar" or "Curved screen" with the stage in the
+   * centre silently drew a circle instead.
+   */
+  if (resolved.position === "centre") {
+    const thickness = 34;
+    // Exactly the width a centre circle would occupy (2 × 0.66 × innerRadius),
+    // so a bar or curve never reaches further into the seats than the circle
+    // it replaces — on a ringed ground that keeps it inside the empty middle.
+    const span = Math.max(120, Math.min(VIEW * 0.42, innerRadius * 1.32));
+    const top = CENTRE - thickness / 2;
+
+    if (resolved.shape === "bar") {
+      return {
+        ...base,
+        kind: "bar",
+        x: CENTRE - span / 2,
+        y: top,
+        width: span,
+        height: thickness,
+        labelX: CENTRE,
+        labelY: CENTRE + 7,
+      };
+    }
+
+    const bow = 26;
+    return {
+      ...base,
+      kind: "curve",
+      path: `M${CENTRE - span / 2},${top + thickness} Q${CENTRE},${top - bow} ${CENTRE + span / 2},${top + thickness}`,
+      labelX: CENTRE,
+      labelY: CENTRE + 10,
+    };
   }
 
   const thickness = 34;
